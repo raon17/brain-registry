@@ -83,11 +83,29 @@ Conditioning changes the reference population. P(churn|complaint) divides by cus
 tab <- matrix(c(60,140,40,760),nrow=2,byrow=TRUE,
               dimnames=list(complaint=c("yes","no"),outcome=c("churn","stay")))
 print(tab)
+print("------------")
 print(c(p_churn=sum(tab[,"churn"])/sum(tab),
         p_churn_given_complaint=tab["yes","churn"]/sum(tab["yes",]),
         p_complaint_given_churn=tab["yes","churn"]/sum(tab[,"churn"])))
 print(prop.table(tab,margin=1))
 ```
 
+### 1.3 · Bayes and the base rate
+
+**Concept**
+
+Posterior probability = prior × likelihood / total evidence probability.
+
+**Example**
+
+A fraud detector has sensitivity .8 and false-positive rate .05; only 1% of payments are fraudulent.
+
 ```{r}
+prior <- .01; sensitivity <- .8; false_positive <- .05
+true_alert <- prior*sensitivity
+false_alert <- (1-prior)*false_positive
+posterior <- true_alert/(true_alert+false_alert)
+print(c(expected_true_alerts=10000*true_alert,
+        expected_false_alerts=10000*false_alert, posterior=posterior))
+print(c(review_value=120*posterior-8))
 ```
