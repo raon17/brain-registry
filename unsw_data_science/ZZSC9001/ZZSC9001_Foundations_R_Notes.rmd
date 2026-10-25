@@ -105,7 +105,69 @@ prior <- .01; sensitivity <- .8; false_positive <- .05
 true_alert <- prior*sensitivity
 false_alert <- (1-prior)*false_positive
 posterior <- true_alert/(true_alert+false_alert)
-print(c(expected_true_alerts=10000*true_alert,
-        expected_false_alerts=10000*false_alert, posterior=posterior))
+print(c(expected_true_alerts=10000*true_alert, expected_false_alerts=10000*false_alert, posterior=posterior))
 print(c(review_value=120*posterior-8))
+```
+
+Even though our system has an 80% success rate, if an alarm goes off, there is only a 13.9% chance it is real. The remaining 86.1% are false alarms. This paradox is known as the Base Rate Fallacy.
+
+### 1.4 · PMFs, expectation, variance and covariance
+
+**Concept**
+
+A PMF assigns probabilities to discrete values. E[X]=Σxp(x); Var(X)=E[(X−E[X])²]. Covariance describes joint co-movement.
+
+**Example**
+
+A support case costs $0, $100 or $200 with probabilities .2, .5, .3.
+
+```{r}
+cost <- c(0,100,200); p <- c(.2,.5,.3)
+mu <- sum(cost*p); variance <- sum((cost-mu)^2*p)
+print(c(mean=mu, variance=variance, sd=sqrt(variance)))
+print(c(var_scaled=4*variance, mean_shifted=2*mu+10))
+x <- c(1,2,3,4); y <- c(2,5,5,8)
+print(c(sample_cov=cov(x,y), correlation=cor(x,y)))
+stopifnot(sum(p)==1, variance==4900)
+```
+
+### 1.5 · Distribution functions: d, p, q and r
+
+**Concept**
+
+Bernoulli models one binary outcome; binomial counts independent equal-probability trials; Poisson models counts under a constant-rate independent-increments model; normal models a continuous symmetric variable.
+
+**Example**
+
+Calculate exactly 3 of 10 customers churning at p=.2, more than 2 arrivals at mean 4, and a normal service-time interval.
+
+```{r}
+print(c(exactly3=dbinom(3,size=10,prob=.2),
+        more_than2=pbinom(2,10,.2,lower.tail=FALSE),
+        poisson_over2=ppois(2,lambda=4,lower.tail=FALSE)))
+print(c(normal_90_to110=pnorm(110,100,15)-pnorm(90,100,15),
+        normal_95th=qnorm(.95,100,15)))
+set.seed(101); print(rbinom(8,size=1,prob=.2))
+```
+
+### 1.6 · Monte Carlo and the law of large numbers
+
+**Concept**
+
+Simulation estimates a probability by repeated random outcomes. Monte Carlo SE describes uncertainty from a finite simulation.
+
+**Example**
+
+Estimate the probability of at least three churners in ten independent customers.
+
+```{r}
+set.seed(102)
+B <- 10000
+counts <- rbinom(B,10,.2)
+hit <- counts>=3
+estimate <- mean(hit); mc_se <- sqrt(estimate*(1-estimate)/B)
+print(c(simulated=estimate, exact=pbinom(2,10,.2,lower.tail=FALSE), MC_SE=mc_se))
+running <- cumsum(hit)/seq_along(hit)
+plot(running,type="l",xlab="Simulation count",ylab="Estimated probability")
+abline(h=pbinom(2,10,.2,lower.tail=FALSE),col="red",lty=2)
 ```
