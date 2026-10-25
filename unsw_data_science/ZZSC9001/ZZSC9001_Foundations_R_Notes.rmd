@@ -1,0 +1,93 @@
+# Foundations of Data Science ZZSC9001
+
+## 0 · R/RStudio foundations
+
+### 0.1 · Vectors, indexing and functions
+
+**Concept**
+
+R evaluates expressions and stores their results in named objects. Vector operations apply to each element. RStudio is an IDE; R is the computing language.
+
+**Example**
+
+Three electricity customers use 100, 200 and 300 kWh; the tariff is $20 plus $0.30/kWh.
+
+```{r}
+options(width=95, digits=5)
+usage <- c(100, 200, 300)
+bill <- function(kwh, rate=0.30, fixed=20) {
+  fixed + rate * kwh
+}
+print(bill(usage))
+print(usage[usage >= 200])
+print(usage[1])
+stopifnot(identical(bill(usage), c(50,80,110)))
+cat(R.version.string, "\n")
+```
+
+### 0.2 · Tables, factors, missing values and grouped means
+
+**Concept**
+
+A data frame has one observation per row and one variable per column. Factors represent categories, not arbitrary numerical scores.
+
+**Example**
+
+Four customer records contain one missing usage value.
+
+```{r}
+customers <- data.frame(id=1:4, plan=factor(c("A","A","B","B")),kwh=c(100,200,300,NA))
+print(customers)
+print(is.na(customers$kwh))
+print("------------")
+print(c(raw_mean=mean(customers$kwh), observed_mean=mean(customers$kwh,na.rm=TRUE)))
+print("------------")
+print(tapply(customers$kwh, customers$plan, mean, na.rm=TRUE))
+print("------------")
+print(customers[!is.na(customers$kwh) & customers$plan=="A", , drop=FALSE])
+```
+
+## 1 · Probability and randomness — Statistics Quiz / Final
+
+### 1.1 · Events, complements, unions and counting
+
+**Concept**
+
+For events A and B, P(A or B)=P(A)+P(B)−P(A and B). Counting favourable outcomes works directly only for equally likely outcomes.
+
+**Example**
+
+Among six equally likely order outcomes, A={2,4,6} and B={4,5,6}.
+
+```{r}
+omega <- 1:6; A <- c(2,4,6); B <- c(4,5,6)
+pA <- length(A)/length(omega); pB <- length(B)/length(omega)
+pAB <- length(intersect(A,B))/length(omega)
+print(c(A=pA, B=pB, intersection=pAB, union=pA+pB-pAB, complement_A=1-pA))
+print("------------")
+print(choose(5,2))
+stopifnot(abs((pA+pB-pAB)-length(union(A,B))/6)<1e-12)
+```
+
+### 1.2 · Conditional probability and independence
+
+**Concept**
+
+Conditioning changes the reference population. P(churn|complaint) divides by customers with complaints.
+
+**Example**
+
+1,000 customers: 60 complaint/churn, 140 complaint/stay, 40 no-complaint/churn, 760 no-complaint/stay.
+
+```{r}
+tab <- matrix(c(60,140,40,760),nrow=2,byrow=TRUE,
+              dimnames=list(complaint=c("yes","no"),outcome=c("churn","stay")))
+print(tab)
+print(c(p_churn=sum(tab[,"churn"])/sum(tab),
+        p_churn_given_complaint=tab["yes","churn"]/sum(tab["yes",]),
+        p_complaint_given_churn=tab["yes","churn"]/sum(tab[,"churn"])))
+print(prop.table(tab,margin=1))
+```
+
+```{r}
+```
