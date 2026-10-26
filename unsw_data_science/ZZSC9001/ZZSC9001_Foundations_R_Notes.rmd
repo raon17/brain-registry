@@ -165,9 +165,65 @@ set.seed(102)
 B <- 10000
 counts <- rbinom(B,10,.2)
 hit <- counts>=3
-estimate <- mean(hit); mc_se <- sqrt(estimate*(1-estimate)/B)
+estimate <- mean(hit)
+mc_se <- sqrt(estimate*(1-estimate)/B)
 print(c(simulated=estimate, exact=pbinom(2,10,.2,lower.tail=FALSE), MC_SE=mc_se))
 running <- cumsum(hit)/seq_along(hit)
 plot(running,type="l",xlab="Simulation count",ylab="Estimated probability")
 abline(h=pbinom(2,10,.2,lower.tail=FALSE),col="red",lty=2)
+```
+
+```{r}
+set.seed(103)
+means1 <- replicate(4000,mean(rexp(1,rate=.1)))
+means50 <- replicate(4000,mean(rexp(50,rate=.1)))
+print(rbind(n1=c(mean=mean(means1),sd=sd(means1),theory_SE=10),
+            n50=c(mean=mean(means50),sd=sd(means50),theory_SE=10/sqrt(50))))
+par(mfrow=c(1,2))
+hist(means1,main="Individual times",xlab="Minutes",col="lightblue")
+hist(means50,main="Means of 50",xlab="Minutes",col="lightgreen")
+par(mfrow=c(1,1))
+```
+
+## 2 · Inferential statistics
+
+### 2.1 · Estimator, SD, SE and confidence interval
+
+**Concept**
+
+A parameter describes a population; an estimator is a rule applied to a sample. SD measures individual spread; SE measures estimator uncertainty.
+
+**Example**
+
+Five independent normally distributed customer bills are 80,90,100,110,120 dollars. Estimate their population mean.
+
+```{r}
+bills <- c(80,90,100,110,120)
+n <- length(bills)
+m <- mean(bills)
+s <- sd(bills)
+se <- s/sqrt(n)
+ci <- m + c(-1,1)*qt(.975,df=n-1)*se
+print(c(n=n,mean=m,SD=s,SE=se,lower=ci[1],upper=ci[2]))
+print(t.test(bills)$conf.int)
+stopifnot(max(abs(ci-t.test(bills)$conf.int))<1e-10)
+```
+
+### 2.2 · Hypothesis tests, p-values and CI duality
+
+**Concept**
+
+A p-value measures how extreme the observed statistic is under a specified null model. It does not give the probability that the null is true.
+
+**Example**
+
+Test whether average bills equal $95 using the previous sample.
+
+```{r}
+test <- t.test(bills,mu=95,alternative="two.sided")
+t_manual <- (mean(bills)-95)/(sd(bills)/sqrt(length(bills)))
+p_manual <- 2*pt(-abs(t_manual),df=length(bills)-1)
+print(c(t=t_manual,p=p_manual,reject_at_05=p_manual<.05))
+print(test$conf.int)
+stopifnot(abs(p_manual-test$p.value)<1e-12)
 ```
