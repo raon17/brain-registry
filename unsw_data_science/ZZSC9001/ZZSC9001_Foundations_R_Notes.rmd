@@ -13,6 +13,39 @@ R evaluates expressions and stores their results in named objects. Vector operat
 Three electricity customers use 100, 200 and 300 kWh; the tariff is $20 plus $0.30/kWh.
 
 ```{r}
+install.packages(c("rmarkdown", "knitr", "rpart", "class", "nnet", "e1071"))
+```
+
+```{r}
+options(width=100, digits=5)
+needed <- c("rpart","class","nnet","e1071")
+missing <- needed[!vapply(needed,requireNamespace,logical(1),quietly=TRUE)]
+if(length(missing)) stop("Install these packages first: ",paste(missing,collapse=", "))
+# All fixtures are synthetic. These seeds reproduce the supplied teaching examples.
+set.seed(2601)
+support <- data.frame(ticket_id=1:240,
+                      process=factor(rep(c("current","new"),each=120),levels=c("current","new")),
+                      issue=factor(sample(c("billing","technical","account"),240,replace=TRUE)))
+support$minutes <- pmax(1,rnorm(240,mean=ifelse(support$process=="new",9,12),sd=3))
+support$satisfied <- factor(rbinom(240,1,ifelse(support$process=="new",.85,.75)),levels=0:1,labels=c("no","yes"))
+set.seed(2602)
+shops <- data.frame(shop_id=1:30,before=rnorm(30,500,60))
+shops$after <- shops$before-rnorm(30,25,18)
+set.seed(2603)
+energy <- data.frame(shop_id=1:240,temp=runif(240,15,35))
+energy$price <- .20+.004*(energy$temp-15)+rnorm(240,0,.01)
+energy$demand <- 300+12*(energy$temp-25)-500*(energy$price-.24)+rnorm(240,0,15)
+set.seed(2604)
+subscribers <- data.frame(customer_id=1:900,complaints=rpois(900,.8),tenure=runif(900,1,36))
+p <- plogis(-1+.9*subscribers$complaints-.05*subscribers$tenure)
+subscribers$churn <- factor(rbinom(900,1,p),levels=0:1,labels=c("stay","leave"))
+set.seed(2605)
+sales <- data.frame(month=1:30,sales=100+3*(1:30)+rnorm(30,0,5))
+print(data.frame(dataset=c("support","shops","energy","subscribers","sales"),
+                 rows=c(nrow(support),nrow(shops),nrow(energy),nrow(subscribers),nrow(sales))))
+```
+
+```{r}
 options(width=95, digits=5)
 usage <- c(100, 200, 300)
 bill <- function(kwh, rate=0.30, fixed=20) {
@@ -226,4 +259,26 @@ p_manual <- 2*pt(-abs(t_manual),df=length(bills)-1)
 print(c(t=t_manual,p=p_manual,reject_at_05=p_manual<.05))
 print(test$conf.int)
 stopifnot(abs(p_manual-test$p.value)<1e-12)
+```
+
+### 2.3 · Independent versus paired designs
+
+**Concept**
+
+Pairing uses within-unit differences when the same units are observed twice. Independent groups require a different variance calculation.
+
+**Example**
+
+Six shops have electricity usage before and after an efficiency programme.
+
+```{r}
+before <- c(100,120,140,160,180,200)
+after <- before-c(5,8,9,4,8,8)
+change <- after-before
+paired_test <- t.test(after,before,paired=TRUE)
+independent_test <- t.test(after,before) # Welch, only appropriate for independent units
+print(change)
+print(c(mean_change=mean(change),paired_p=paired_test$p.value,
+        independent_p=independent_test$p.value))
+print(paired_test$conf.int)
 ```
