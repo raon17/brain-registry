@@ -13,14 +13,22 @@ R evaluates expressions and stores their results in named objects. Vector operat
 Three electricity customers use 100, 200 and 300 kWh; the tariff is $20 plus $0.30/kWh.
 
 ```{r}
-install.packages(c("rmarkdown", "knitr", "rpart", "class", "nnet", "e1071"))
+packages <- c("rmarkdown", "knitr", "rpart", "class", "nnet", "e1071")
+user_library <- file.path(path.expand("~"), "R", "library", paste(R.version$major, R.version$minor, sep = "."))
+dir.create(user_library, recursive = TRUE, showWarnings = FALSE)
+.libPaths(unique(c(user_library, .libPaths())))
+options(repos = c(CRAN = "https://cloud.r-project.org"), timeout = 300)
+
+missing <- packages[!vapply(packages, requireNamespace, logical(1), quietly = TRUE)]
+if (length(missing)) install.packages(missing, lib = user_library)
+
+have <- setNames(vapply(packages, requireNamespace, logical(1), quietly = TRUE), packages)
+invisible(lapply(packages[have], library, character.only = TRUE))
+print(data.frame(package = packages, installed = unname(have)))
 ```
 
 ```{r}
 options(width=100, digits=5)
-needed <- c("rpart","class","nnet","e1071")
-missing <- needed[!vapply(needed,requireNamespace,logical(1),quietly=TRUE)]
-if(length(missing)) stop("Install these packages first: ",paste(missing,collapse=", "))
 # All fixtures are synthetic. These seeds reproduce the supplied teaching examples.
 set.seed(2601)
 support <- data.frame(ticket_id=1:240,
@@ -45,17 +53,61 @@ print(data.frame(dataset=c("support","shops","energy","subscribers","sales"),
                  rows=c(nrow(support),nrow(shops),nrow(energy),nrow(subscribers),nrow(sales))))
 ```
 
+# Chapter 1. Probability: make decisions under uncertainty
+
+**CLO focus:** 1,2,4.
+
+**What this chapter is trying to teach:** Define the event and denominator, choose a suitable probability model, and use simulation to explore risk.
+
+**Core topics:** Conditional probability; Bayes and base rates; binomial, Poisson and normal models; expectation; variability; covariance; LLN and CLT; probability rules.
+
+**Code covered:** `!`, `&`, `cor()`, `cov()`, `mean()`, `pbinom()`, `pnorm()`, `ppois()`, `prop.table()`, `prop.table(..., margin=1)`, `qbinom()`, `qnorm()`, `qpois()`, `quantile()`, `replicate()`, `rpois()`, `sample()`, `sd()`, `table()`, `var()`, `|`.
+
+## 1.1 Read conditional probabilities from a service table
+
+**CLO focus:** 1,4.
+
+**Business question:** Are customers more likely to be satisfied under the new process?
+
+### The idea in simple words
+
+“Probability” means the share of cases with an outcome. “Conditional probability” means calculate that share within the group named after “given”. Think: among new-process tickets, how many customers said yes?
+
+### Choose the method
+
+Use `table()` for counts and `prop.table(..., margin=1)` for within-row proportions.
+
+**Why it fits:** The margin argument sets the denominator. Row percentages answer satisfaction within process; column percentages answer process mix within satisfaction. Those are different questions.
+
+### Run the example
+
 ```{r}
-options(width=95, digits=5)
-usage <- c(100, 200, 300)
-bill <- function(kwh, rate=0.30, fixed=20) {
-  fixed + rate * kwh
-}
-print(bill(usage))
-print(usage[usage >= 200])
-print(usage[1])
-stopifnot(identical(bill(usage), c(50,80,110)))
-cat(R.version.string, "\n")
+aggregate(minutes ~ process, support, function(x)
+  c(n=length(x), mean=mean(x), median=median(x), SD=sd(x)))
+boxplot(minutes ~ process, data=support,
+        ylab="Handling time (minutes)", xlab="Process",
+        main="Compare spread as well as average")
+```
+
+```{r}
+service_counts <- table(process=support$process,satisfied=support$satisfied)
+service_counts
+round(prop.table(service_counts,margin=1),3)
+round(prop.table(service_counts,margin=2),3)
+```
+
+```{r}
+csv_text <- "order_id,channel,revenue
+1,web,80
+2,store,120
+3,web,
+4,store,60"
+imported <- read.csv(text=csv_text,na.strings="")
+imported$channel <- factor(imported$channel)
+str(imported)
+subset(imported,is.na(revenue))
+known_orders <- subset(imported,!is.na(revenue))
+aggregate(revenue~channel,data=known_orders,FUN=mean)
 ```
 
 ### 0.2 · Tables, factors, missing values and grouped means
@@ -69,15 +121,10 @@ A data frame has one observation per row and one variable per column. Factors re
 Four customer records contain one missing usage value.
 
 ```{r}
-customers <- data.frame(id=1:4, plan=factor(c("A","A","B","B")),kwh=c(100,200,300,NA))
-print(customers)
-print(is.na(customers$kwh))
-print("------------")
-print(c(raw_mean=mean(customers$kwh), observed_mean=mean(customers$kwh,na.rm=TRUE)))
-print("------------")
-print(tapply(customers$kwh, customers$plan, mean, na.rm=TRUE))
-print("------------")
-print(customers[!is.na(customers$kwh) & customers$plan=="A", , drop=FALSE])
+service_counts <- table(process=support$process,satisfied=support$satisfied)
+service_counts
+round(prop.table(service_counts,margin=1),3)
+round(prop.table(service_counts,margin=2),3)
 ```
 
 ## 1 · Probability and randomness — Statistics Quiz / Final
@@ -93,13 +140,10 @@ For events A and B, P(A or B)=P(A)+P(B)−P(A and B). Counting favourable outcom
 Among six equally likely order outcomes, A={2,4,6} and B={4,5,6}.
 
 ```{r}
-omega <- 1:6; A <- c(2,4,6); B <- c(4,5,6)
-pA <- length(A)/length(omega); pB <- length(B)/length(omega)
-pAB <- length(intersect(A,B))/length(omega)
-print(c(A=pA, B=pB, intersection=pAB, union=pA+pB-pAB, complement_A=1-pA))
-print("------------")
-print(choose(5,2))
-stopifnot(abs((pA+pB-pAB)-length(union(A,B))/6)<1e-12)
+data.frame(capacity=3:8,
+           chance_exceeding=pbinom(3:8,size=50,prob=.10,lower.tail=FALSE))
+data.frame(planning_probability=.95,
+           cancellations_95th_percentile=qbinom(.95,size=50,prob=.10))
 ```
 
 ### 1.2 · Conditional probability and independence
