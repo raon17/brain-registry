@@ -326,3 +326,14 @@ print(c(mean_change=mean(change),paired_p=paired_test$p.value,
         independent_p=independent_test$p.value))
 print(paired_test$conf.int)
 ```
+
+```{r}
+fraud <- c("no", "no", "no", "yes", "yes", "no", "no", "no")
+alert <- c("no", "no", "yes", "yes", "yes", "no", "no", "no")
+counts <- table(Fraud = fraud, Alert = alert)
+counts
+round(prop.table(counts, margin = 2), 3)
+```
+
+```{r}
+```
