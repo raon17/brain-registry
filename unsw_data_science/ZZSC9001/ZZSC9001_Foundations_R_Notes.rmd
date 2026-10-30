@@ -336,4 +336,12 @@ round(prop.table(counts, margin = 2), 3)
 ```
 
 ```{r}
+knitr::opts_chunk$set(echo = TRUE, warning = TRUE, message = FALSE,
+                      fig.width = 8, fig.height = 4.5, cache = FALSE,
+                      error = FALSE)
+options(width = 95, digits = 4, stringsAsFactors = FALSE)
+set.seed(9001)
+```
+
+```{r}
 ```
