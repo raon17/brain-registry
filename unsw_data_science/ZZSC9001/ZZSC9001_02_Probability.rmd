@@ -1,0 +1,28 @@
+# Chapter 2: Probability 
+
+## Part A — Asking the right data question
+### 2.1 What is data science actually doing?
+
+$$\text{conversion rate}=\frac{\text{buyers}}{\text{visitors}}$$
+
+```{r}
+visitors <- 400
+buyers <- 40
+rate <- buyers/visitors
+c(rate=rate,percent=100*rate)
+```
+
+### 2.2 Populations, samples and the risk of bias
+$$\text{sample fraction}=\frac{n}{N}$$
+
+```{r}
+sample_size <- 200; population <- 10000
+100*sample_size/population
+```
+
+```{r}
+# Chapter 1: R & Data Fundamentals
+```
+
+```{r}
+```
