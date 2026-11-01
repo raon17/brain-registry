@@ -20,9 +20,45 @@ sample_size <- 200; population <- 10000
 100*sample_size/population
 ```
 
-```{r}
-# Chapter 1: R & Data Fundamentals
-```
+**Data dictionary.** Each row represents one parcel; `rain`, `fragile`, `express`, `late`, `damaged`, `complaint` and `insured` are binary 0/1 indicators. These are observations generated from a transparent synthetic mechanism.
+
+## 2.1 Probability is a business risk, not a prediction guarantee
+
+**Importance: High | CLO1 + CLO4**
+
+**The business question.** **SwiftShip** delivers thousands of parcels. The CEO asks: "If 15% arrive late, does that mean every seventh parcel will be late?" No. A probability describes frequency under a process, not a fixed delivery schedule.
+
+### In plain English
+
+For a delivery company, risk is like a weather forecast: a 20% late-delivery rate is about many deliveries, not a guarantee for the next parcel.
+
+### Core theory
+
+Estimate event probabilities as a fraction of observed trials. Think of the denominator as **all deliveries you could have observed**, not a selected favourable subgroup.
+
+### General mathematical equation
+
+
+$$
+\widehat P(L)=\frac{n_L}{n}
+$$
+
+
+### What each symbol means
+
+- $L$ = late delivery event.
+- $n_L$ = observed late parcels.
+- $n$ = all parcels in the data.
+- the hat indicates an estimate.
+
+
+### R code — analyse the case
 
 ```{r}
+event_prob <- prop.table(table(parcel$late))
+event_prob
+barplot(event_prob,col=c("steelblue","tomato"),
+        names.arg=c("On time","Late"),ylim=c(0,1),
+        main="Mutually exclusive outcomes must total 1",ylab="Probability")
+sum(event_prob)
 ```
