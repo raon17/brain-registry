@@ -76,5 +76,50 @@ barplot(event_prob,col=c("steelblue","tomato"),
 sum(event_prob)
 ```
 
+# 2.4 Complement rule: avoiding double counting
+
+$$
+P(L^c)=1-P(L)
+$$
+
+### What each symbol means
+
+- $L$ = late.
+- $L^c$ = not late.
+- 1 = probability of all possibilities.
+
+```{r}
+not_late <- 1 - mean(parcel$late)
+c(not_late=not_late,late=1-not_late)
+pie(c("Not late"=not_late,"Late"=1-not_late),
+    col=c("steelblue","tomato"),main="Whole delivery population")
+```
+
+## 2.5 Addition and multiplication rules
+
+$$
+P(A\cup B)=P(A)+P(B)-P(A\cap B)
+$$
+
+$$
+P(A\cap B)=P(A\mid B)P(B)=P(B\mid A)P(A)
+$$
+
+- $L$ = late.
+- $D$ = damaged.
+- $\cup$ = either or both.
+- $\cap$ = both.
+- subtraction removes double counting.
+
+```{r}
+pL <- mean(parcel$late==1); pD <- mean(parcel$damaged==1)
+pBoth <- mean(parcel$late==1 & parcel$damaged==1)
+pEither <- pL+pD-pBoth
+c(late=pL,damaged=pD,both=pBoth,either=pEither)
+barplot(c(pL,pD,pBoth,pEither),names.arg=c("Late","Damaged","Both","Either"),
+        col=c("goldenrod","steelblue","grey55","tomato"),
+        ylab="Probability",main="Overlap matters")
+```
+
 ```{r}
 ```
