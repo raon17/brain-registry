@@ -122,4 +122,24 @@ barplot(c(pL,pD,pBoth,pEither),names.arg=c("Late","Damaged","Both","Either"),
 ```
 
 ```{r}
+n_boxes <- 12; sample_size <- 3
+ways <- c(combinations=choose(n_boxes,sample_size),
+          ordered=prod((n_boxes-sample_size+1):n_boxes))
+ways
+barplot(ways,col=c("steelblue","tomato"),
+        main="Three chosen parcels: does order matter?",ylab="Number of possibilities")
+```
+
+```{r}
+conditional_risk <- with(parcel,tapply(late,rain,mean))
+conditional_risk
+barplot(conditional_risk,names.arg=c("Dry","Rainy"),
+        col=c("goldenrod","steelblue"),ylab="P(late | weather)",
+        main="Weather-specific late risk")
+```
+
+```{r}
+```
+
+```{r}
 ```
