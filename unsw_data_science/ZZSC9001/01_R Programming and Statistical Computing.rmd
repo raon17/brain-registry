@@ -1,0 +1,343 @@
+```{r}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 6.5, fig.height = 4, comment = "#>")
+# install any missing packages once, then load them
+pkgs <- c("dplyr", "ggplot2", "e1071", "rpart", "class", "nnet", "DBI", "RSQLite")
+missing <- pkgs[!sapply(pkgs, requireNamespace, quietly = TRUE)]
+if (length(missing) > 0) install.packages(missing, repos = "https://cloud.r-project.org")
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+set.seed(2026)
+
+# ---- daily operations table ----
+n_days <- 180
+daily <- data.frame(date = seq(as.Date("2026-01-01"), by = "day", length.out = n_days))
+daily$wday    <- factor(format(daily$date, "%a"),
+                        levels = c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))
+daily$weekend <- as.integer(daily$wday %in% c("Sat", "Sun"))
+daily$temp    <- round(26 - 8 * (1:n_days) / n_days + rnorm(n_days, 0, 2), 1)
+daily$promo   <- rbinom(n_days, 1, 0.4)
+daily$ad_spend <- round(runif(n_days, 50, 300))
+# true mechanism: sales = 900 + 2*ad + 150*promo + 180*weekend + 12*temp + noise
+daily$sales     <- round(900 + 2 * daily$ad_spend + 150 * daily$promo +
+                         180 * daily$weekend + 12 * daily$temp + rnorm(n_days, 0, 120))
+daily$customers <- rpois(n_days, daily$sales / 8.5)
+
+# ---- transaction table ----
+menu <- data.frame(drink = c("Latte", "Flat White", "Cappuccino", "Cold Brew", "Tea"),
+                   price = c(5.5, 5.0, 5.0, 6.0, 4.0))
+n_tx <- 800
+tx <- data.frame(id = 1:n_tx,
+                 date = sample(daily$date, n_tx, replace = TRUE),
+                 hour = sample(7:16, n_tx, replace = TRUE,
+                               prob = c(.18, .16, .12, .08, .08, .12, .10, .07, .05, .04)))
+tx$drink    <- sample(menu$drink, n_tx, replace = TRUE, prob = c(.30, .30, .15, .15, .10))
+tx$loyalty  <- rbinom(n_tx, 1, 0.35)
+tx$qty      <- 1 + rpois(n_tx, 0.2 + 0.5 * tx$loyalty)   # loyal customers buy more
+tx$price    <- menu$price[match(tx$drink, menu$drink)]
+tx$spend    <- tx$price * tx$qty
+tx$wait_min <- round(rexp(n_tx, rate = 1/3), 2)
+
+head(daily)
+head(tx)
+```
+
+---
+
+# Chapter 1 — R Programming and Statistical Computing
+
+**CLO4** · 10 topics · Case study: building a reproducible coffee shop analysis
+
+---
+
+## 1.1 Translating a Business Question into Reproducible Calculations
+
+`CLO4`
+
+**Business example.** The owner asks: "Does running the promotion make us more money?" That sentence cannot be computed. It must become a metric, a data source, a calculation and a decision rule.
+
+**Core theory.** A business question becomes a reproducible calculation in four steps:
+
+1. **Metric** — what number measures "more money"? (mean daily sales)
+2. **Comparison** — against what? (promo days vs non-promo days)
+3. **Calculation** — which formula? (difference in means)
+4. **Decision rule** — what result changes the action? (keep promo if the difference exceeds its cost)
+
+Reproducible means that anyone with the script and the data gets the same number.
+
+**Math.**
+
+$$\Delta = \bar{x}_{\text{promo}} - \bar{x}_{\text{no promo}}, \qquad \bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i$$
+
+```{r}
+promo_mean   <- mean(daily$sales[daily$promo == 1])
+nopromo_mean <- mean(daily$sales[daily$promo == 0])
+delta        <- promo_mean - nopromo_mean
+promo_cost   <- 100                      # assumed extra daily cost of the promotion
+
+c(promo = promo_mean, no_promo = nopromo_mean, delta = delta)
+ifelse(delta > promo_cost, "Keep promotion", "Drop promotion")
+```
+
+```{r}
+m <- c("No promo" = nopromo_mean, "Promo" = promo_mean)
+bp <- barplot(m, ylim = c(0, max(m) * 1.15), col = c("grey80", "steelblue"),
+              ylab = "Mean daily sales ($)", main = "Promo vs no-promo days")
+text(bp, m, labels = round(m), pos = 3)
+```
+
+---
+
+## 1.2 R, RStudio, Scripts and Working Directories
+
+`CLO4`
+
+**Business example.** The analyst hands the sales script to the owner's accountant. It fails because it reads `C:/Users/analyst/sales.csv`, a path that exists only on one machine.
+
+**Core theory.**
+
+* **R** is the language and engine. **RStudio** is the editor (script pane, console, environment, plots).
+* A **script** (`.R`) stores commands so they can be re-run. The **console** is for one-off tests.
+* The **working directory** is the folder R reads from and writes to by default. Use relative paths (`"data/sales.csv"`) and RStudio Projects (`.Rproj`) rather than absolute paths.
+* Packages are installed once (`install.packages`) and loaded each session (`library`).
+
+**Math.** None. Arithmetic in R follows standard precedence: $a + b \times c^2$ is `a + b * c^2`.
+
+```{r}
+R.version.string                 # engine version
+getwd()                          # current working directory (differs per machine)
+file.path("data", "sales.csv")   # portable path construction
+
+price <- 5.5                     # assignment
+cups  <- 120
+revenue <- price * cups          # arithmetic
+revenue
+
+head(ls())                       # objects now in the environment
+```
+
+```{r}
+cups_seq <- 0:200
+plot(cups_seq, price * cups_seq, type = "l", lwd = 2, xlab = "Cups sold",
+     ylab = "Revenue ($)", main = "Revenue = price x cups")
+points(cups, revenue, pch = 19, col = "red")
+```
+
+---
+
+## 1.3 Data Types, Operators and Missing Values
+
+`CLO4`
+
+**Business example.** A till export records one wait time as `NA` because the sensor failed. Calling `mean()` on that column returns `NA` and the dashboard shows nothing.
+
+**Core theory.**
+
+* Atomic types: `numeric` (double), `integer`, `character`, `logical`, plus `factor` (categorical) and `Date`.
+* Arithmetic: `+ - * / ^`, integer division `%/%`, remainder `%%`. Comparison: `== != < > <= >=`. Logic: `& | !`.
+* `NA` means unknown. Any arithmetic with `NA` returns `NA`. Handle it explicitly with `is.na()`, `na.rm = TRUE`, or `complete.cases()`.
+* Never test missingness with `x == NA`; it returns `NA`.
+
+**Math.** Mean with missing values removed, where $m$ is the count of non-missing values:
+
+$$\bar{x} = \frac{1}{m}\sum_{i:\,x_i \ne NA} x_i$$
+
+```{r}
+wait <- c(2.1, 3.4, NA, 1.8, 5.2)
+
+class(wait); class(5L); class("latte"); class(TRUE); class(Sys.Date())
+17 %/% 5; 17 %% 5               # integer division and remainder
+wait > 3                         # NA propagates
+
+mean(wait)                       # NA
+mean(wait, na.rm = TRUE)         # (2.1+3.4+1.8+5.2)/4
+sum(is.na(wait))                 # count of missing
+wait[!is.na(wait)]               # drop missing
+```
+
+```{r}
+plot(wait, type = "b", pch = 19, xlab = "Customer", ylab = "Wait (min)", main = "Wait times with a missing value")
+abline(v = which(is.na(wait)), col = "red", lty = 2)
+```
+
+---
+
+## 1.4 Vectors, Matrices, Lists and Data Frames
+
+`CLO4`
+
+**Business example.** The shop stores prices (a vector), a 3-day by 2-drink sales grid (a matrix), a bundle of mixed shop details (a list) and the transaction table (a data frame).
+
+**Core theory.**
+
+| Structure | Holds | Indexing |
+|---|---|---|
+| Vector | one type, 1-D | `x[i]` |
+| Matrix | one type, 2-D | `m[i, j]` |
+| List | any mix of objects | `l[["name"]]` or `l$name` |
+| Data frame | list of equal-length columns, mixed types | `df[i, j]`, `df$col` |
+
+R is **vectorised**: operations apply to every element without loops.
+
+**Math.** Matrix-vector product, used later in regression and neural networks:
+
+$$\mathbf{y} = A\mathbf{x}, \qquad y_i = \sum_j a_{ij}x_j$$
+
+```{r}
+prices <- c(latte = 5.5, tea = 4.0, cold_brew = 6.0)      # vector
+prices * 1.1                                               # vectorised +10%
+
+sales_grid <- matrix(c(40, 25, 30, 12, 8, 15), nrow = 3,
+                     dimnames = list(c("Mon","Tue","Wed"), c("Latte","Tea")))
+sales_grid
+sales_grid %*% c(5.5, 4.0)                                 # revenue per day = A x
+
+shop <- list(name = "Kensington Brew", seats = 24, drinks = names(prices))  # list
+shop$seats; shop[["drinks"]]
+
+str(tx[, c("id", "drink", "spend")])                       # data frame
+tx[1:3, c("drink", "spend")]
+```
+
+```{r}
+barplot(t(sales_grid), beside = TRUE, legend.text = TRUE, args.legend = list(x = "topright"),
+        ylab = "Cups sold", main = "Sales grid (matrix) as a bar chart")
+```
+
+---
+
+## 1.5 Importing Data and Checking Duplicates and Data Quality
+
+`CLO4`
+
+**Business example.** The till system exports a CSV. A double-scan creates a duplicate row, and one spend is blank. Revenue is over-counted by the duplicate.
+
+**Core theory.** Data quality checks come before analysis:
+
+1. **Structure** — `str()`, `dim()`, column types after `read.csv`.
+2. **Missing values** — `colSums(is.na(df))`.
+3. **Duplicates** — `duplicated()`, `anyDuplicated()`.
+4. **Validity** — impossible values (negative price, wait > 60 min).
+5. **Consistency** — categories spelled one way.
+
+**Math.** Duplicate inflation of a total with $d$ duplicated rows of value $v_j$:
+
+$$\text{Total}_{\text{reported}} = \text{Total}_{\text{true}} + \sum_{j=1}^{d} v_j$$
+
+```{r}
+dirty <- rbind(tx[1:6, c("id","drink","spend")], tx[3, c("id","drink","spend")])            # row 3 scanned twice
+dirty$spend[5] <- NA                                       # missing value
+
+path <- tempfile(fileext = ".csv")
+write.csv(dirty, path, row.names = FALSE)
+imp <- read.csv(path)                                      # import
+
+dim(imp)
+colSums(is.na(imp))                                        # missing per column
+sum(duplicated(imp))                                       # number of duplicates
+imp[duplicated(imp), ]                                     # which row
+clean <- imp[!duplicated(imp) & complete.cases(imp), ]     # remove both problems
+c(reported = sum(imp$spend, na.rm = TRUE), clean = sum(clean$spend))
+```
+
+```{r}
+barplot(c(Reported = sum(imp$spend, na.rm = TRUE), Clean = sum(clean$spend)),
+        col = c("tomato", "grey70"), ylab = "Total spend ($)", main = "Duplicate inflates revenue")
+```
+
+---
+
+## 1.6 Selecting, Filtering, Transforming and Grouping Data
+
+`CLO4`
+
+**Business example.** The owner wants average spend per drink for loyalty members during the morning rush (7–10am).
+
+**Core theory.** The `dplyr` verbs form a pipeline read left to right with `%>%`:
+
+| Verb | Action |
+|---|---|
+| `select()` | choose columns |
+| `filter()` | choose rows |
+| `mutate()` | create or change columns |
+| `group_by()` + `summarise()` | split-apply-combine |
+| `arrange()` | sort |
+
+**Math.** Group mean for group $g$ with $n_g$ rows:
+
+$$\bar{x}_g = \frac{1}{n_g}\sum_{i \in g} x_i$$
+
+```{r}
+tx %>%
+  select(drink, hour, loyalty, spend) %>%          # columns
+  filter(loyalty == 1, hour <= 10) %>%             # rows: members, morning
+  mutate(spend_cents = spend * 100) %>%            # new column
+  group_by(drink) %>%                              # split
+  summarise(n = n(), mean_spend = round(mean(spend), 2)) %>%   # combine
+  arrange(desc(mean_spend))
+```
+
+```{r}
+tx %>% 
+  filter(hour <= 10) %>%
+  group_by(drink, member = factor(loyalty, labels = c("Non-member", "Member"))) %>%
+  summarise(mean_spend = mean(spend), .groups = "drop") %>%
+  ggplot(aes(drink, mean_spend, fill = member)) +
+  geom_col(position = "dodge") +
+  labs(x = NULL, y = "Mean spend ($)", fill = NULL, title = "Morning spend by drink and membership")
+```
+
+---
+
+## 1.7 Descriptive Statistics, Quantiles and Outliers
+
+`CLO4`
+
+**Business example.** Most waits are short but a few customers wait 15 minutes. The mean misleads; the median and the tail describe the experience.
+
+**Core theory.**
+
+* **Centre:** mean (sensitive to extremes), median (robust).
+* **Spread:** variance, standard deviation, IQR.
+* **Quantiles:** the $p$-quantile $Q_p$ has proportion $p$ of data at or below it.
+* **Outliers (Tukey rule):** values below $Q_1 - 1.5\,\text{IQR}$ or above $Q_3 + 1.5\,\text{IQR}$.
+
+**Math.**
+
+$$s^2 = \frac{1}{n-1}\sum_{i=1}^{n}(x_i-\bar{x})^2, \qquad \text{IQR} = Q_3 - Q_1$$
+
+```{r}
+w <- tx$wait_min
+c(mean = mean(w), median = median(w), sd = sd(w), IQR = IQR(w))
+print("--------------------------")
+quantile(w, c(0.25, 0.5, 0.75, 0.9, 0.95))
+print("--------------------------")
+q <- quantile(w, c(.25, .75))
+q
+fence <- q[2] + 1.5 * IQR(w)
+c(upper_fence = unname(fence), n_outliers = sum(w > fence))
+summary(w)
+
+# 1. draw a boxplot of the wait times
+boxplot(w, horizontal = TRUE, main = "Wait time (min)", col = "grey90", ylim = c(0, 18))  
+
+# 2. calculate the quartiles and the upper fence value
+q_val <- unname(quantile(w, c(0.25, 0.5, 0.75)))
+fence_val <- q_val[3] + 1.5 * IQR(w)
+
+# 3. calculate the x-coordinates for the quartiles and fence
+# text(x axis, y-coordinate, "text to display", pos = position, col = color, cex = size)
+text(x = q_val[1], y = 1.25, labels = paste0("Q1\n(", round(q_val[1], 2), ")"), col = "blue", cex = 0.8)
+text(x = q_val[2], y = 0.75, labels = paste0("Median\n(", round(q_val[2], 2), ")"), col = "darkgreen", cex = 0.8)
+text(x = q_val[3], y = 1.25, labels = paste0("Q3\n(", round(q_val[3], 2), ")"), col = "purple", cex = 0.8)
+text(x = fence_val, y = 1.25, labels = paste0("Fence\n(", round(fence_val, 2), ")"), col = "red", cex = 0.8)
+```
+
+```{r}
+```
+
+```{r}
+```
