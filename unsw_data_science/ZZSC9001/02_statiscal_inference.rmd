@@ -1,0 +1,49 @@
+```{r}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 6.5, fig.height = 4, comment = "#>")
+# install any missing packages once, then load them
+pkgs <- c("dplyr", "ggplot2", "e1071", "rpart", "class", "nnet", "DBI", "RSQLite")
+missing <- pkgs[!sapply(pkgs, requireNamespace, quietly = TRUE)]
+if (length(missing) > 0) install.packages(missing, repos = "https://cloud.r-project.org")
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+set.seed(2026)
+
+# ---- daily operations table ----
+n_days <- 180
+daily <- data.frame(date = seq(as.Date("2026-01-01"), by = "day", length.out = n_days))
+daily$wday    <- factor(format(daily$date, "%a"),
+                        levels = c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))
+daily$weekend <- as.integer(daily$wday %in% c("Sat", "Sun"))
+daily$temp    <- round(26 - 8 * (1:n_days) / n_days + rnorm(n_days, 0, 2), 1)
+daily$promo   <- rbinom(n_days, 1, 0.4)
+daily$ad_spend <- round(runif(n_days, 50, 300))
+# true mechanism: sales = 900 + 2*ad + 150*promo + 180*weekend + 12*temp + noise
+daily$sales     <- round(900 + 2 * daily$ad_spend + 150 * daily$promo +
+                         180 * daily$weekend + 12 * daily$temp + rnorm(n_days, 0, 120))
+daily$customers <- rpois(n_days, daily$sales / 8.5)
+
+# ---- transaction table ----
+menu <- data.frame(drink = c("Latte", "Flat White", "Cappuccino", "Cold Brew", "Tea"),
+                   price = c(5.5, 5.0, 5.0, 6.0, 4.0))
+n_tx <- 800
+tx <- data.frame(id = 1:n_tx,
+                 date = sample(daily$date, n_tx, replace = TRUE),
+                 hour = sample(7:16, n_tx, replace = TRUE,
+                               prob = c(.18, .16, .12, .08, .08, .12, .10, .07, .05, .04)))
+tx$drink    <- sample(menu$drink, n_tx, replace = TRUE, prob = c(.30, .30, .15, .15, .10))
+tx$loyalty  <- rbinom(n_tx, 1, 0.35)
+tx$qty      <- 1 + rpois(n_tx, 0.2 + 0.5 * tx$loyalty)   # loyal customers buy more
+tx$price    <- menu$price[match(tx$drink, menu$drink)]
+tx$spend    <- tx$price * tx$qty
+tx$wait_min <- round(rexp(n_tx, rate = 1/3), 2)
+
+head(daily)
+head(tx)
+```
+
+```{r}
+```
