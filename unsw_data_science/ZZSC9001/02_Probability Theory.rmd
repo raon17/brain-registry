@@ -45,5 +45,70 @@ head(daily)
 head(tx)
 ```
 
+# Chapter 2 — Probability Theory and Business Uncertainty
+
+**CLO1, CLO4** · 10 topics · Case study: uncertain customer demand
+
+---
+
+## 2.1 Random Experiments, Sample Spaces and Events
+
+`CLO1`
+
+**Business example.** Two customers walk in. Each orders a Latte (L), Tea (T) or Cold Brew (C). The owner wants the chance that at least one Latte is ordered.
+
+
+**Core theory.**
+
+* **Random experiment:** a process with an uncertain outcome (what one customer orders).
+* **Sample space** $S$: the set of all possible outcomes.
+* **Event** $A \subseteq S$: a set of outcomes of interest.
+* For equally likely outcomes, $P(A)=|A|/|S|$. Probabilities satisfy $0\le P(A)\le 1$ and $P(S)=1$.
+
+**Math.**
+
+$$P(A) = \frac{|A|}{|S|}, \qquad |S| = 3 \times 3 = 9 \text{ for two customers}$$
+
+```{r}
+S <- expand.grid(customer1 = c("L","T","C"), customer2 = c("L","T","C"),
+                 stringsAsFactors = FALSE)
+nrow(S)                                           # |S| = 9
+A <- S$customer1 == "L" | S$customer2 == "L"      # at least one latte
+S[A, ]
+sum(A) / nrow(S)                                  # 5/9
+```
+
+Five of nine outcomes contain an L: LL, LT, LC, TL, CL. $P(A)=5/9 \approx 0.556$.
+
+---
+
+## 2.2 Complements, Unions, Intersections and Probability Rules
+
+`CLO1`
+
+**Business example.** Let $A$ = "order includes a Latte-type milk drink" and $B$ = "customer is a loyalty member". What is the chance a random order is a latte *or* from a member?
+
+**Core theory.**
+
+* **Complement** $A^c$: "not $A$". $P(A^c)=1-P(A)$.
+* **Intersection** $A\cap B$: both occur. **Union** $A\cup B$: at least one occurs.
+* **Addition rule:** subtract the overlap, otherwise it is counted twice.
+
+**Math.**
+
+$$P(A^c) = 1 - P(A), \qquad P(A\cup B) = P(A) + P(B) - P(A\cap B)$$
+
+```{r}
+A <- tx$drink == "Latte"
+B <- tx$loyalty == 1
+
+pA  <- mean(A); pB <- mean(B); pAB <- mean(A & B)
+c(P_A = pA, P_B = pB, P_A_and_B = pAB)
+
+c(complement   = 1 - pA,
+  union_rule   = pA + pB - pAB,
+  union_direct = mean(A | B))              # both routes agree
+```
+
 ```{r}
 ```

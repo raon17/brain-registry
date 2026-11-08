@@ -336,8 +336,112 @@ text(x = q_val[3], y = 1.25, labels = paste0("Q3\n(", round(q_val[3], 2), ")"), 
 text(x = fence_val, y = 1.25, labels = paste0("Fence\n(", round(fence_val, 2), ")"), col = "red", cex = 0.8)
 ```
 
-```{r}
-```
+## 1.8 Conditional Logic, Loops and User-Defined Functions
+
+`CLO4`
+
+**Business example.** Pricing rule: orders of 3+ drinks get 10% off, orders of 5+ get 15% off. The rule must be applied to thousands of orders.
+
+**Core theory.**
+
+* `if / else if / else` for one decision; `ifelse()` for a whole vector.
+* `for` loops repeat a block; `sapply()` / `vapply()` apply a function to each element and are usually shorter.
+* `function(args) { ... }` packages logic once. The last evaluated value is returned.
+
+**Math.** Piecewise discount function:
+
+$$d(q) = \begin{cases} 0 & q < 3 \\ 0.10 & 3 \le q < 5 \\ 0.15 & q \ge 5 \end{cases}, \qquad \text{total} = p \cdot q \cdot (1 - d(q))$$
 
 ```{r}
+discount <- function(q) {
+  if (q >= 5) 0.15 else if (q >= 3) 0.10 else 0
+}
+order_total <- function(price, q) price * q * (1 - discount(q))
+
+order_total(5.5, 2)      # 5.5*2*1.00 = 11.00
+order_total(5.5, 3)      # 5.5*3*0.90 = 14.85
+order_total(5.5, 6)      # 5.5*6*0.85 = 28.05
+
+qs <- c(1, 3, 5)
+for (q in qs) cat("qty", q, "-> total", order_total(5.5, q), "\n")   # loop
+sapply(qs, order_total, price = 5.5)                                 # vectorised alternative
+```
+
+---
+
+## 1.9 Random Number Generation and Monte Carlo Simulation
+
+`CLO4`
+
+**Business example.** Break-even needs 1,500 dollars of sales per day. What fraction of days will the shop hit that, given day-to-day randomness? A formula is awkward; simulating thousands of days is easy.
+
+**Core theory.**
+
+* Computers produce **pseudo-random** numbers from a seed. `set.seed()` makes results reproducible.
+* Generators: `runif`, `rnorm`, `rbinom`, `rpois`, `rexp`, `sample`.
+* **Monte Carlo:** simulate the process $B$ times, then estimate a probability by the proportion of simulations where the event occurred. By the Law of Large Numbers the estimate converges to the truth as $B$ grows.
+
+**Math.**
+
+$$\hat{p} = \frac{1}{B}\sum_{b=1}^{B} \mathbf{1}\{S_b \ge 1500\}, \qquad \text{SE}(\hat p) = \sqrt{\frac{\hat p(1-\hat p)}{B}}$$
+
+```{r}
+set.seed(1)
+B <- 10000
+# model: customers ~ Poisson(170); spend per customer ~ Normal(8.8, 2)
+sim_sales <- replicate(B, {
+  n <- rpois(1, 170)
+  sum(rnorm(n, mean = 8.8, sd = 2))
+})
+p_hat <- mean(sim_sales >= 1500)
+se    <- sqrt(p_hat * (1 - p_hat) / B)
+c(p_hat = p_hat, se = se)
+hist(sim_sales, breaks = 40, col = "grey85", main = "Simulated daily sales",
+     xlab = "Sales ($)"); abline(v = 1500, col = "red", lwd = 2)
+```
+
+Re-running with the same seed returns identical numbers. Changing `B` from 100 to 10,000 shrinks the standard error.
+
+---
+
+## 1.10 Reproducible Reporting with R Markdown
+
+`CLO4`
+
+**Business example.** The Economics Report is under 1,000 words and must contain code, charts and a written conclusion. R Markdown keeps all three in one file, so numbers in the text update when the data change.
+
+**Core theory.** An `.Rmd` file has three parts:
+
+1. **YAML header** — title, author, output format (`html_document`, `pdf_document`, `word_document`).
+2. **Markdown text** — headings, lists, LaTeX maths between `$...$` and `$$...$$`.
+3. **Code chunks** — executed at knit time; output is inserted below the chunk.
+
+Knit with the Knit button or `rmarkdown::render("file.Rmd")`.
+
+**Chunk options**
+
+| Option | Effect |
+|---|---|
+| `echo = FALSE` | hide code, show output |
+| `eval = FALSE` | show code, do not run |
+| `include = FALSE` | run, show nothing |
+| `message`, `warning = FALSE` | suppress messages |
+| `fig.width`, `fig.height` | plot size in inches |
+
+**Math.** None.
+
+```{r}
+# The skeleton of an Rmd file, printed as plain text
+writeLines(c(
+  "---",
+  "title: \"Promotion Analysis\"",
+  "output: html_document",
+  "---",
+  "",
+  "The promotion changed daily sales by `r round(delta, 1)` dollars.",
+  "",
+  "```{r}",
+  "summary(lm(sales ~ promo, data = daily))",
+  "```"
+))
 ```
