@@ -172,5 +172,38 @@ round(cond, 3)
 joint["Latte", "1"] / sum(joint[, "1"])
 ```
 
+---
+
+## 2.5 Independence and Mutually Exclusive Events
+
+`CLO1`
+
+**Business example.** Is "orders a Latte" independent of "is a loyalty member"? Does marketing by drink type need to be split by membership? Separately: one customer cannot order both a Latte and a Tea in a single cup, so those events are mutually exclusive.
+
+**Core theory.**
+
+* **Independent:** knowing $B$ does not change $P(A)$. Equivalent: $P(A\cap B)=P(A)P(B)$.
+* **Mutually exclusive (disjoint):** cannot occur together, $P(A\cap B)=0$.
+* These are different. Disjoint events with positive probabilities are **dependent**, since knowing one occurred forces the other not to occur.
+
+**Math.**
+
+$$\text{Independent: } P(A\mid B)=P(A) \iff P(A\cap B)=P(A)P(B)$$
+
+$$\text{Mutually exclusive: } P(A\cup B)=P(A)+P(B)$$
+
+```{r}
+A <- tx$drink == "Latte"; B <- tx$loyalty == 1
+c(P_A_and_B = mean(A & B), P_A_times_P_B = mean(A) * mean(B))   # close => independent
+c(P_A = mean(A), P_A_given_B = mean(A[B]))
+
+# mutually exclusive: Latte vs Tea in one order
+L <- tx$drink == "Latte"; T_ <- tx$drink == "Tea"
+mean(L & T_)                                        # 0
+mean(L | T_); mean(L) + mean(T_)                    # addition rule without overlap
+
+chisq.test(table(tx$drink, tx$loyalty))$p.value     # formal check (Topic 4.8)
+```
+
 ```{r}
 ```
