@@ -205,5 +205,108 @@ mean(L | T_); mean(L) + mean(T_)                    # addition rule without over
 chisq.test(table(tx$drink, tx$loyalty))$p.value     # formal check (Topic 4.8)
 ```
 
+The sample joint probability is close to the product of marginals, consistent with independence. A large chi-squared p-value agrees. (Exact equality is not expected in a sample.)
+
+---
+
+## 2.6 The Law of Total Probability
+
+`CLO1`
+
+**Business example.** Hot days (40% of days) see 70% of customers choose a cold drink; cool days see 20%. What is the overall share of cold drinks? Stock planning depends on it.
+
+**Core theory.** If events $B_1,\dots,B_k$ partition the sample space (disjoint and covering everything), then an event $A$ can be split across them and the pieces added. Weight each conditional probability by the probability of its scenario.
+
+**Math.**
+
+$$P(A)=\sum_{i=1}^{k}P(A\mid B_i)\,P(B_i)$$
+
+$$P(\text{Cold}) = (0.70)(0.40) + (0.20)(0.60) = 0.28 + 0.12 = 0.40$$
+
+```{r}
+p_weather <- c(hot = 0.40, cool = 0.60)       # P(B_i), sums to 1
+p_cold_given <- c(hot = 0.70, cool = 0.20)    # P(Cold | B_i)
+
+pieces <- p_cold_given * p_weather
+pieces
+print("------")
+sum(pieces)                       # P(Cold) = 0.40
+```
+
+---
+
+## 2.7 Bayes' Rule and Updating Business Beliefs
+
+`CLO1`
+
+**Business example.** A customer orders a cold brew. Before looking outside, the owner believed 40% chance the day is hot. After seeing the order, what is the probability the day is hot?
+
+**Core theory.** Bayes' rule reverses a conditional probability. A **prior** belief is updated by the **likelihood** of the evidence into a **posterior** belief. The denominator is the total probability of the evidence (Topic 2.6).
+
+**Math.**
+
+$$P(B_j\mid A)=\frac{P(A\mid B_j)\,P(B_j)}{\sum_i P(A\mid B_i)\,P(B_i)}$$
+
+$$P(\text{Hot}\mid\text{Cold})=\frac{0.70\times0.40}{0.40}=0.70$$
+
+```{r}
+prior      <- c(hot = 0.40, cool = 0.60)
+likelihood <- c(hot = 0.70, cool = 0.20)          # P(cold order | weather)
+
+evidence  <- sum(likelihood * prior)              # P(cold) = 0.40
+posterior <- likelihood * prior / evidence
+round(posterior, 3)                               # hot 0.70, cool 0.30
+
+# sequential updating: second cold order uses the first posterior as new prior
+posterior2 <- likelihood * posterior / sum(likelihood * posterior)
+round(posterior2, 3)                              # hot rises to about 0.89
+```
+
+Each cold order raises confidence the day is hot: 0.40 → 0.70 → 0.89.
+
+---
+
+## 2.8 Probability Trees and Contingency Tables
+
+`CLO1`
+
+**Business example.** The same weather-and-drink story drawn two ways: a tree (follow branches, multiply along each path) and a contingency table (joint probabilities in cells).
+
+**Core theory.**
+
+* **Tree:** branch labels are conditional probabilities. A path probability is the **product** along the path. Add paths that share an outcome.
+* **Contingency table:** cells hold joint probabilities; margins are marginal probabilities; dividing a cell by its margin gives a conditional probability.
+
+```
+Weather          Drink           Path probability
+              .70 ── Cold        0.40 × 0.70 = 0.28
+  Hot (0.40) ─┤
+              .30 ── Other       0.40 × 0.30 = 0.12
+              .20 ── Cold        0.60 × 0.20 = 0.12
+  Cool(0.60) ─┤
+              .80 ── Other       0.60 × 0.80 = 0.48
+```
+
+**Math.**
+
+$$P(\text{Hot}\cap\text{Cold}) = P(\text{Cold}\mid\text{Hot})P(\text{Hot}) = 0.28$$
+
+```{r}
+paths <- data.frame(
+  weather = c("Hot", "Hot", "Cool", "Cool"),
+  drink   = c("Cold", "Other", "Cold", "Other"),
+  p_branch1 = c(.40, .40, .60, .60),
+  p_branch2 = c(.70, .30, .20, .80))
+paths$p_path <- paths$p_branch1 * paths$p_branch2
+paths
+
+# the same numbers as a contingency table
+tab <- xtabs(p_path ~ weather + drink, data = paths)
+addmargins(tab)
+
+# conditional from the table: P(Hot | Cold)
+tab["Hot", "Cold"] / sum(tab[, "Cold"])
+```
+
 ```{r}
 ```
