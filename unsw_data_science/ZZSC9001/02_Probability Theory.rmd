@@ -308,5 +308,35 @@ addmargins(tab)
 tab["Hot", "Cold"] / sum(tab[, "Cold"])
 ```
 
+---
+
+## 2.9 Simulating Events and Checking Theoretical Probabilities
+
+`CLO1, CLO4`
+
+**Business example.** Before trusting the calculations in 2.6 and 2.7, simulate 200,000 days and customers and see whether the proportions match.
+
+**Core theory.** Simulation is a check on algebra. Generate the random mechanism, count outcomes, and compare relative frequency with the theoretical probability. The Law of Large Numbers says the match improves as the number of trials grows.
+
+**Math.**
+
+$$\hat{P}(A)=\frac{\#\{\text{trials where }A\text{ occurs}\}}{N}\;\xrightarrow{N\to\infty}\;P(A)$$
+
+```{r}
+set.seed(42)
+N <- 200000
+hot  <- rbinom(N, 1, 0.40) == 1
+cold <- ifelse(hot, rbinom(N, 1, 0.70), rbinom(N, 1, 0.20)) == 1
+
+c(sim_P_cold = mean(cold),         theory = 0.40)
+c(sim_P_hot_given_cold = mean(hot[cold]), theory = 0.70)
+
+# convergence of the estimate
+running <- cumsum(cold) / seq_along(cold)
+plot(running[seq(100, N, by = 100)], type = "l", xlab = "trials / 100",
+     ylab = "estimate of P(cold)", main = "Law of large numbers")
+abline(h = 0.40, col = "red")
+```
+
 ```{r}
 ```
