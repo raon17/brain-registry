@@ -338,5 +338,43 @@ plot(running[seq(100, N, by = 100)], type = "l", xlab = "trials / 100",
 abline(h = 0.40, col = "red")
 ```
 
+---
+
+## 2.10 Expected Payoffs and Decisions Under Uncertainty
+
+`CLO1`
+
+**Business example.** The owner must decide Friday evening how many pastries to bake: 50, 100 or 150. Demand next day is Low, Medium or High with probabilities 0.3, 0.5, 0.2. Each pastry sells at 4 dollars, costs 1.50 to make, and unsold ones are binned.
+
+**Core theory.**
+
+* A **payoff table** gives profit for every (action, state) pair.
+* The **expected payoff** of an action is the probability-weighted average of its payoffs.
+* **Decision rule:** choose the action with the highest expected payoff (risk-neutral).
+* **Expected value of perfect information (EVPI)** is the gain from knowing the state in advance: expected payoff with perfect foresight minus best expected payoff now.
+
+**Math.**
+
+$$E[\text{Payoff}(a)]=\sum_{s} P(s)\cdot\text{Payoff}(a,s)$$
+
+$$\text{Payoff}(a,s)=4\cdot\min(a,\,d_s)-1.5\,a$$
+
+```{r}
+actions <- c(50, 100, 150)
+demand  <- c(Low = 40, Medium = 90, High = 140)
+p       <- c(Low = 0.3, Medium = 0.5, High = 0.2)
+
+payoff <- outer(actions, demand, function(a, d) 4 * pmin(a, d) - 1.5 * a)
+dimnames(payoff) <- list(paste0("bake", actions), names(demand))
+payoff
+
+ev <- payoff %*% p                        # expected payoff per action
+ev
+best_now     <- max(ev)
+perfect_info <- sum(apply(payoff, 2, max) * p)
+c(best_action = actions[which.max(ev)], EV = best_now,
+  EV_perfect_info = perfect_info, EVPI = perfect_info - best_now)
+```
+
 ```{r}
 ```
