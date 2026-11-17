@@ -1,0 +1,380 @@
+```{r}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 6.5, fig.height = 4, comment = "#>")
+# install any missing packages once, then load them
+pkgs <- c("dplyr", "ggplot2", "e1071", "rpart", "class", "nnet", "DBI", "RSQLite")
+missing <- pkgs[!sapply(pkgs, requireNamespace, quietly = TRUE)]
+if (length(missing) > 0) install.packages(missing, repos = "https://cloud.r-project.org")
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+set.seed(2026)
+
+# ---- daily operations table ----
+n_days <- 180
+daily <- data.frame(date = seq(as.Date("2026-01-01"), by = "day", length.out = n_days))
+daily$wday    <- factor(format(daily$date, "%a"),
+                        levels = c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))
+daily$weekend <- as.integer(daily$wday %in% c("Sat", "Sun"))
+daily$temp    <- round(26 - 8 * (1:n_days) / n_days + rnorm(n_days, 0, 2), 1)
+daily$promo   <- rbinom(n_days, 1, 0.4)
+daily$ad_spend <- round(runif(n_days, 50, 300))
+# true mechanism: sales = 900 + 2*ad + 150*promo + 180*weekend + 12*temp + noise
+daily$sales     <- round(900 + 2 * daily$ad_spend + 150 * daily$promo +
+                         180 * daily$weekend + 12 * daily$temp + rnorm(n_days, 0, 120))
+daily$customers <- rpois(n_days, daily$sales / 8.5)
+
+# ---- transaction table ----
+menu <- data.frame(drink = c("Latte", "Flat White", "Cappuccino", "Cold Brew", "Tea"),
+                   price = c(5.5, 5.0, 5.0, 6.0, 4.0))
+n_tx <- 800
+tx <- data.frame(id = 1:n_tx,
+                 date = sample(daily$date, n_tx, replace = TRUE),
+                 hour = sample(7:16, n_tx, replace = TRUE,
+                               prob = c(.18, .16, .12, .08, .08, .12, .10, .07, .05, .04)))
+tx$drink    <- sample(menu$drink, n_tx, replace = TRUE, prob = c(.30, .30, .15, .15, .10))
+tx$loyalty  <- rbinom(n_tx, 1, 0.35)
+tx$qty      <- 1 + rpois(n_tx, 0.2 + 0.5 * tx$loyalty)   # loyal customers buy more
+tx$price    <- menu$price[match(tx$drink, menu$drink)]
+tx$spend    <- tx$price * tx$qty
+tx$wait_min <- round(rexp(n_tx, rate = 1/3), 2)
+
+head(daily)
+head(tx)
+```
+
+# Chapter 2 — Probability Theory and Business Uncertainty
+
+**CLO1, CLO4** · 10 topics · Case study: uncertain customer demand
+
+---
+
+## 2.1 Random Experiments, Sample Spaces and Events
+
+`CLO1`
+
+**Business example.** Two customers walk in. Each orders a Latte (L), Tea (T) or Cold Brew (C). The owner wants the chance that at least one Latte is ordered.
+
+
+**Core theory.**
+
+* **Random experiment:** a process with an uncertain outcome (what one customer orders).
+* **Sample space** $S$: the set of all possible outcomes.
+* **Event** $A \subseteq S$: a set of outcomes of interest.
+* For equally likely outcomes, $P(A)=|A|/|S|$. Probabilities satisfy $0\le P(A)\le 1$ and $P(S)=1$.
+
+**Math.**
+
+$$P(A) = \frac{|A|}{|S|}, \qquad |S| = 3 \times 3 = 9 \text{ for two customers}$$
+
+```{r}
+S <- expand.grid(customer1 = c("L","T","C"), customer2 = c("L","T","C"),
+                 stringsAsFactors = FALSE)
+nrow(S)                                           # |S| = 9
+A <- S$customer1 == "L" | S$customer2 == "L"      # at least one latte
+S[A, ]
+sum(A) / nrow(S)                                  # 5/9
+```
+
+Five of nine outcomes contain an L: LL, LT, LC, TL, CL. $P(A)=5/9 \approx 0.556$.
+
+---
+
+## 2.2 Complements, Unions, Intersections and Probability Rules
+
+`CLO1`
+
+**Business example.** Let $A$ = "order includes a Latte-type milk drink" and $B$ = "customer is a loyalty member". What is the chance a random order is a latte *or* from a member?
+
+**Core theory.**
+
+* **Complement** $A^c$: "not $A$". $P(A^c)=1-P(A)$.
+* **Intersection** $A\cap B$: both occur. **Union** $A\cup B$: at least one occurs.
+* **Addition rule:** subtract the overlap, otherwise it is counted twice.
+
+**Math.**
+
+$$P(A^c) = 1 - P(A), \qquad P(A\cup B) = P(A) + P(B) - P(A\cap B)$$
+
+```{r}
+A <- tx$drink == "Latte"
+B <- tx$loyalty == 1
+
+pA  <- mean(A); pB <- mean(B); pAB <- mean(A & B)
+c(P_A = pA, P_B = pB, P_A_and_B = pAB)
+
+c(complement   = 1 - pA,
+  union_rule   = pA + pB - pAB,
+  union_direct = mean(A | B))              # both routes agree
+```
+
+---
+
+## 2.3 Counting Methods, Permutations and Combinations
+
+`CLO1`
+
+**Business example.** Eight baristas; the manager picks 3 for the Saturday rush. If the **order** matters (opener, closer, floor lead) there are permutations. If only **who is on** matters there are combinations. Separately, the menu allows 5 drinks × 3 sizes × 4 milks.
+
+**Core theory.**
+
+* **Multiplication principle:** independent choices multiply.
+* **Permutation** $P(n,k)$: ordered selection of $k$ from $n$.
+* **Combination** $\binom{n}{k}$: unordered selection. Divide permutations by $k!$ because each group appears $k!$ times.
+
+**Math.**
+
+$$n! = n(n-1)\cdots 1,\qquad P(n,k)=\frac{n!}{(n-k)!},\qquad \binom{n}{k}=\frac{n!}{k!\,(n-k)!}$$
+
+```{r}
+n <- 8; k <- 3
+perm <- factorial(n) / factorial(n - k)     # 8*7*6
+comb <- choose(n, k)
+c(permutations = perm, combinations = comb, ratio = perm / comb)   # ratio = 3! = 6
+
+5 * 3 * 4                                    # menu variants
+
+nrow(t(combn(8, 3)))                         # enumerate all 56 crews
+t(combn(8, 3))[1:3, ]                        # first three crews
+```
+
+---
+
+## 2.4 Joint, Marginal and Conditional Probability
+
+`CLO1`
+
+**Business example.** Do loyalty members order different drinks? The owner needs $P(\text{Latte})$, $P(\text{member})$, $P(\text{Latte and member})$, and $P(\text{Latte}\mid\text{member})$.
+
+**Core theory.**
+
+* **Joint** $P(A\cap B)$: both events together (cells of a contingency table).
+* **Marginal** $P(A)$: row or column totals of the joint table.
+* **Conditional** $P(A\mid B)$: probability of $A$ once we know $B$ happened. Restrict attention to $B$, then renormalise.
+
+**Math.**
+
+$$P(A\mid B)=\frac{P(A\cap B)}{P(B)}, \qquad P(A\cap B)=P(A\mid B)\,P(B)$$
+
+```{r}
+joint <- prop.table(table(drink = tx$drink, member = tx$loyalty))
+round(joint, 3)                                     # joint
+round(margin.table(joint, 1), 3)                    # marginal: drink
+round(margin.table(joint, 2), 3)                    # marginal: member
+
+# conditional: P(drink | member)
+cond <- prop.table(table(drink = tx$drink, member = tx$loyalty), margin = 2)
+round(cond, 3)
+
+# by formula for Latte given member
+joint["Latte", "1"] / sum(joint[, "1"])
+```
+
+---
+
+## 2.5 Independence and Mutually Exclusive Events
+
+`CLO1`
+
+**Business example.** Is "orders a Latte" independent of "is a loyalty member"? Does marketing by drink type need to be split by membership? Separately: one customer cannot order both a Latte and a Tea in a single cup, so those events are mutually exclusive.
+
+**Core theory.**
+
+* **Independent:** knowing $B$ does not change $P(A)$. Equivalent: $P(A\cap B)=P(A)P(B)$.
+* **Mutually exclusive (disjoint):** cannot occur together, $P(A\cap B)=0$.
+* These are different. Disjoint events with positive probabilities are **dependent**, since knowing one occurred forces the other not to occur.
+
+**Math.**
+
+$$\text{Independent: } P(A\mid B)=P(A) \iff P(A\cap B)=P(A)P(B)$$
+
+$$\text{Mutually exclusive: } P(A\cup B)=P(A)+P(B)$$
+
+```{r}
+A <- tx$drink == "Latte"; B <- tx$loyalty == 1
+c(P_A_and_B = mean(A & B), P_A_times_P_B = mean(A) * mean(B))   # close => independent
+c(P_A = mean(A), P_A_given_B = mean(A[B]))
+
+# mutually exclusive: Latte vs Tea in one order
+L <- tx$drink == "Latte"; T_ <- tx$drink == "Tea"
+mean(L & T_)                                        # 0
+mean(L | T_); mean(L) + mean(T_)                    # addition rule without overlap
+
+chisq.test(table(tx$drink, tx$loyalty))$p.value     # formal check (Topic 4.8)
+```
+
+The sample joint probability is close to the product of marginals, consistent with independence. A large chi-squared p-value agrees. (Exact equality is not expected in a sample.)
+
+---
+
+## 2.6 The Law of Total Probability
+
+`CLO1`
+
+**Business example.** Hot days (40% of days) see 70% of customers choose a cold drink; cool days see 20%. What is the overall share of cold drinks? Stock planning depends on it.
+
+**Core theory.** If events $B_1,\dots,B_k$ partition the sample space (disjoint and covering everything), then an event $A$ can be split across them and the pieces added. Weight each conditional probability by the probability of its scenario.
+
+**Math.**
+
+$$P(A)=\sum_{i=1}^{k}P(A\mid B_i)\,P(B_i)$$
+
+$$P(\text{Cold}) = (0.70)(0.40) + (0.20)(0.60) = 0.28 + 0.12 = 0.40$$
+
+```{r}
+p_weather <- c(hot = 0.40, cool = 0.60)       # P(B_i), sums to 1
+p_cold_given <- c(hot = 0.70, cool = 0.20)    # P(Cold | B_i)
+
+pieces <- p_cold_given * p_weather
+pieces
+print("------")
+sum(pieces)                       # P(Cold) = 0.40
+```
+
+---
+
+## 2.7 Bayes' Rule and Updating Business Beliefs
+
+`CLO1`
+
+**Business example.** A customer orders a cold brew. Before looking outside, the owner believed 40% chance the day is hot. After seeing the order, what is the probability the day is hot?
+
+**Core theory.** Bayes' rule reverses a conditional probability. A **prior** belief is updated by the **likelihood** of the evidence into a **posterior** belief. The denominator is the total probability of the evidence (Topic 2.6).
+
+**Math.**
+
+$$P(B_j\mid A)=\frac{P(A\mid B_j)\,P(B_j)}{\sum_i P(A\mid B_i)\,P(B_i)}$$
+
+$$P(\text{Hot}\mid\text{Cold})=\frac{0.70\times0.40}{0.40}=0.70$$
+
+```{r}
+prior      <- c(hot = 0.40, cool = 0.60)
+likelihood <- c(hot = 0.70, cool = 0.20)          # P(cold order | weather)
+
+evidence  <- sum(likelihood * prior)              # P(cold) = 0.40
+posterior <- likelihood * prior / evidence
+round(posterior, 3)                               # hot 0.70, cool 0.30
+
+# sequential updating: second cold order uses the first posterior as new prior
+posterior2 <- likelihood * posterior / sum(likelihood * posterior)
+round(posterior2, 3)                              # hot rises to about 0.89
+```
+
+Each cold order raises confidence the day is hot: 0.40 → 0.70 → 0.89.
+
+---
+
+## 2.8 Probability Trees and Contingency Tables
+
+`CLO1`
+
+**Business example.** The same weather-and-drink story drawn two ways: a tree (follow branches, multiply along each path) and a contingency table (joint probabilities in cells).
+
+**Core theory.**
+
+* **Tree:** branch labels are conditional probabilities. A path probability is the **product** along the path. Add paths that share an outcome.
+* **Contingency table:** cells hold joint probabilities; margins are marginal probabilities; dividing a cell by its margin gives a conditional probability.
+
+```
+Weather          Drink           Path probability
+              .70 ── Cold        0.40 × 0.70 = 0.28
+  Hot (0.40) ─┤
+              .30 ── Other       0.40 × 0.30 = 0.12
+              .20 ── Cold        0.60 × 0.20 = 0.12
+  Cool(0.60) ─┤
+              .80 ── Other       0.60 × 0.80 = 0.48
+```
+
+**Math.**
+
+$$P(\text{Hot}\cap\text{Cold}) = P(\text{Cold}\mid\text{Hot})P(\text{Hot}) = 0.28$$
+
+```{r}
+paths <- data.frame(
+  weather = c("Hot", "Hot", "Cool", "Cool"),
+  drink   = c("Cold", "Other", "Cold", "Other"),
+  p_branch1 = c(.40, .40, .60, .60),
+  p_branch2 = c(.70, .30, .20, .80))
+paths$p_path <- paths$p_branch1 * paths$p_branch2
+paths
+
+# the same numbers as a contingency table
+tab <- xtabs(p_path ~ weather + drink, data = paths)
+addmargins(tab)
+
+# conditional from the table: P(Hot | Cold)
+tab["Hot", "Cold"] / sum(tab[, "Cold"])
+```
+
+---
+
+## 2.9 Simulating Events and Checking Theoretical Probabilities
+
+`CLO1, CLO4`
+
+**Business example.** Before trusting the calculations in 2.6 and 2.7, simulate 200,000 days and customers and see whether the proportions match.
+
+**Core theory.** Simulation is a check on algebra. Generate the random mechanism, count outcomes, and compare relative frequency with the theoretical probability. The Law of Large Numbers says the match improves as the number of trials grows.
+
+**Math.**
+
+$$\hat{P}(A)=\frac{\#\{\text{trials where }A\text{ occurs}\}}{N}\;\xrightarrow{N\to\infty}\;P(A)$$
+
+```{r}
+set.seed(42)
+N <- 200000
+hot  <- rbinom(N, 1, 0.40) == 1
+cold <- ifelse(hot, rbinom(N, 1, 0.70), rbinom(N, 1, 0.20)) == 1
+
+c(sim_P_cold = mean(cold),         theory = 0.40)
+c(sim_P_hot_given_cold = mean(hot[cold]), theory = 0.70)
+
+# convergence of the estimate
+running <- cumsum(cold) / seq_along(cold)
+plot(running[seq(100, N, by = 100)], type = "l", xlab = "trials / 100",
+     ylab = "estimate of P(cold)", main = "Law of large numbers")
+abline(h = 0.40, col = "red")
+```
+
+---
+
+## 2.10 Expected Payoffs and Decisions Under Uncertainty
+
+`CLO1`
+
+**Business example.** The owner must decide Friday evening how many pastries to bake: 50, 100 or 150. Demand next day is Low, Medium or High with probabilities 0.3, 0.5, 0.2. Each pastry sells at 4 dollars, costs 1.50 to make, and unsold ones are binned.
+
+**Core theory.**
+
+* A **payoff table** gives profit for every (action, state) pair.
+* The **expected payoff** of an action is the probability-weighted average of its payoffs.
+* **Decision rule:** choose the action with the highest expected payoff (risk-neutral).
+* **Expected value of perfect information (EVPI)** is the gain from knowing the state in advance: expected payoff with perfect foresight minus best expected payoff now.
+
+**Math.**
+
+$$E[\text{Payoff}(a)]=\sum_{s} P(s)\cdot\text{Payoff}(a,s)$$
+
+$$\text{Payoff}(a,s)=4\cdot\min(a,\,d_s)-1.5\,a$$
+
+```{r}
+actions <- c(50, 100, 150)
+demand  <- c(Low = 40, Medium = 90, High = 140)
+p       <- c(Low = 0.3, Medium = 0.5, High = 0.2)
+
+payoff <- outer(actions, demand, function(a, d) 4 * pmin(a, d) - 1.5 * a)
+dimnames(payoff) <- list(paste0("bake", actions), names(demand))
+payoff
+
+ev <- payoff %*% p                        # expected payoff per action
+ev
+best_now     <- max(ev)
+perfect_info <- sum(apply(payoff, 2, max) * p)
+c(best_action = actions[which.max(ev)], EV = best_now,
+  EV_perfect_info = perfect_info, EVPI = perfect_info - best_now)
+```
+
+```{r}
+```

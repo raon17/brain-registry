@@ -1,0 +1,100 @@
+```{r}
+title: "ZZSC9001 Foundations of Data Science — Study Notes"
+subtitle: "CLO-aligned notes · 6 chapters · 60 topics · one coffee shop case study"
+author: "UNSW · Hexamester 2 · 2026"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    number_sections: false
+    df_print: paged
+    code_folding: show
+```
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 6.5, fig.height = 4, comment = "#>")
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+set.seed(2026)
+
+# ---- daily operations table ----
+n_days <- 180
+daily <- data.frame(date = seq(as.Date("2026-01-01"), by = "day", length.out = n_days))
+daily$wday    <- factor(format(daily$date, "%a"),
+                        levels = c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))
+daily$weekend <- as.integer(daily$wday %in% c("Sat", "Sun"))
+daily$temp    <- round(26 - 8 * (1:n_days) / n_days + rnorm(n_days, 0, 2), 1)
+daily$promo   <- rbinom(n_days, 1, 0.4)
+daily$ad_spend <- round(runif(n_days, 50, 300))
+# true mechanism: sales = 900 + 2*ad + 150*promo + 180*weekend + 12*temp + noise
+daily$sales     <- round(900 + 2 * daily$ad_spend + 150 * daily$promo +
+                         180 * daily$weekend + 12 * daily$temp + rnorm(n_days, 0, 120))
+daily$customers <- rpois(n_days, daily$sales / 8.5)
+
+# ---- transaction table ----
+menu <- data.frame(drink = c("Latte", "Flat White", "Cappuccino", "Cold Brew", "Tea"),
+                   price = c(5.5, 5.0, 5.0, 6.0, 4.0))
+n_tx <- 800
+tx <- data.frame(id = 1:n_tx,
+                 date = sample(daily$date, n_tx, replace = TRUE),
+                 hour = sample(7:16, n_tx, replace = TRUE,
+                               prob = c(.18, .16, .12, .08, .08, .12, .10, .07, .05, .04)))
+tx$drink    <- sample(menu$drink, n_tx, replace = TRUE, prob = c(.30, .30, .15, .15, .10))
+tx$loyalty  <- rbinom(n_tx, 1, 0.35)
+tx$qty      <- 1 + rpois(n_tx, 0.2 + 0.5 * tx$loyalty)   # loyal customers buy more
+tx$price    <- menu$price[match(tx$drink, menu$drink)]
+tx$spend    <- tx$price * tx$qty
+tx$wait_min <- round(rexp(n_tx, rate = 1/3), 2)
+
+head(daily)
+head(tx)
+```
+
+Input: a 3×3 payoff matrix and a probability vector. Transformation: matrix-vector product. Output: expected profit per action, the best action, and the most the owner should pay for a perfect demand forecast (EVPI).
+
+---
+
+# Chapter 3 — Random Variables and Probability Distributions
+
+**CLO2, CLO4** · 10 topics · Case study: modelling orders, spending and waiting times
+
+---
+
+## 3.1 Discrete and Continuous Random Variables
+
+`CLO2`
+
+**Business example.** Three quantities the shop tracks: drinks per order (counts), customers per hour (counts), wait time in minutes (measured).
+
+**Core theory.** A **random variable** $X$ assigns a number to each outcome of a random experiment.
+
+| Type | Values | Example | Described by |
+|---|---|---|---|
+| Discrete | countable (0, 1, 2, …) | drinks per order | PMF $p(x)$ |
+| Continuous | any value in an interval | wait time | PDF $f(x)$ |
+
+For a continuous variable $P(X=x)=0$ for every single $x$. Only intervals have probability.
+
+**Math.**
+
+$$\text{Discrete: }\sum_x p(x)=1 \qquad \text{Continuous: }\int_{-\infty}^{\infty} f(x)\,dx=1$$
+
+```{r}
+table(tx$qty)                       # discrete: countable values
+round(prop.table(table(tx$qty)), 3) # empirical PMF
+
+summary(tx$wait_min)                # continuous: any value in a range
+op <- par(mfrow = c(1, 2))
+barplot(table(tx$qty), main = "Discrete: qty", col = "grey80")
+hist(tx$wait_min, breaks = 30, main = "Continuous: wait", xlab = "minutes", col = "grey80")
+par(op)
+```
+
+```{r}
+```
