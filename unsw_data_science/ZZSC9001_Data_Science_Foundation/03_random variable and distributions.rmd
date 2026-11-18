@@ -96,5 +96,41 @@ hist(tx$wait_min, breaks = 30, main = "Continuous: wait", xlab = "minutes", col 
 par(op)
 ```
 
+---
+
+## 3.2 Probability Mass, Density and Cumulative Distribution Functions
+
+`CLO2`
+
+**Business example.** "What is the chance a customer waits **under** 2 minutes?" is a CDF question. "How many customers arrive in an hour, exactly 8?" is a PMF question.
+
+**Core theory.**
+
+* **PMF** $p(x)=P(X=x)$ (discrete). **PDF** $f(x)$ (continuous): area under it gives probability.
+* **CDF** $F(x)=P(X\le x)$ works for both. It is non-decreasing from 0 to 1.
+* R naming: `d` = mass/density, `p` = CDF, `q` = quantile (inverse CDF), `r` = random draw. For example `dbinom`, `pbinom`, `qbinom`, `rbinom`.
+
+**Math.**
+
+$$F(x)=\sum_{t\le x}p(t) \quad\text{or}\quad F(x)=\int_{-\infty}^{x}f(t)\,dt, \qquad P(a<X\le b)=F(b)-F(a)$$
+
+```{r}
+# Discrete: arrivals ~ Poisson(8) per hour
+dpois(8, 8)                          # PMF: P(X = 8)
+ppois(8, 8)                          # CDF: P(X <= 8)
+ppois(10, 8) - ppois(5, 8)           # P(5 < X <= 10)
+
+# Continuous: wait ~ Exponential(mean 3) => rate 1/3
+pexp(2, rate = 1/3)                  # P(W <= 2) = 1 - exp(-2/3)
+1 - exp(-2/3)                        # same, by formula
+qexp(0.95, rate = 1/3)               # 95th percentile
+
+x <- seq(0, 15, 0.05)
+op <- par(mfrow = c(1, 2))
+plot(x, dexp(x, 1/3), type = "l", main = "PDF", ylab = "f(x)")
+plot(x, pexp(x, 1/3), type = "l", main = "CDF", ylab = "F(x)")
+par(op)
+```
+
 ```{r}
 ```
