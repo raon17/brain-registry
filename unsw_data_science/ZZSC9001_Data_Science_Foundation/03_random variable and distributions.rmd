@@ -167,5 +167,62 @@ set.seed(3); s <- sample(x, 1e5, TRUE, prob = p)
 c(sim_mean = mean(s), sim_var = var(s))
 ```
 
+---
+
+## 3.4 Bernoulli and Binomial Models
+
+`CLO2`
+
+**Business example.** 35% of customers are loyalty members. Of the next 20 customers, how many are members? What is the chance at least 10 are?
+
+**Core theory.**
+
+* **Bernoulli($p$):** one trial, success (1) with probability $p$, else failure (0).
+* **Binomial($n,p$):** number of successes in $n$ independent Bernoulli trials with constant $p$. Conditions: fixed $n$, two outcomes, independence, constant $p$.
+
+**Math.**
+
+$$P(X=k)=\binom{n}{k}p^k(1-p)^{n-k},\qquad E[X]=np,\qquad \text{Var}(X)=np(1-p)$$
+
+```{r}
+n <- 20; p <- 0.35
+dbinom(7, n, p)                              # P(X = 7)
+choose(20, 7) * p^7 * (1 - p)^13             # same, by formula
+1 - pbinom(9, n, p)                          # P(X >= 10)
+c(mean = n * p, var = n * p * (1 - p), sd = sqrt(n * p * (1 - p)))
+
+set.seed(4)
+sim <- rbinom(1e5, n, p)
+c(sim_P_ge10 = mean(sim >= 10), sim_mean = mean(sim))
+barplot(dbinom(0:20, n, p), names.arg = 0:20, main = "Binomial(20, 0.35)", col = "grey80")
+```
+
+---
+
+## 3.5 Poisson Models for Customer Arrivals
+
+`CLO2`
+
+**Business example.** Between 8 and 9am about 6 customers arrive per 10 minutes. How likely is a 10-minute window with 0 arrivals (idle barista), or 10 or more (queue builds)?
+
+**Core theory.** The **Poisson($\lambda$)** counts events in a fixed interval when events occur independently, at a constant average rate $\lambda$, one at a time. Its mean and variance are both $\lambda$ (a quick diagnostic: if the sample variance is far from the mean, Poisson fits badly). Rates scale with the window: 6 per 10 minutes is 36 per hour.
+
+**Math.**
+
+$$P(X=k)=\frac{e^{-\lambda}\lambda^k}{k!},\qquad E[X]=\text{Var}(X)=\lambda$$
+
+```{r}
+lambda <- 6
+dpois(0, lambda)                           # exp(-6)
+exp(-lambda)                               # same
+1 - ppois(9, lambda)                       # P(X >= 10)
+
+# diagnostic with the daily customer counts
+c(mean = mean(daily$customers), var = var(daily$customers))   # var >> mean: sales
+                                                              # level varies by day
+# within a stable setting the match is tight
+set.seed(5); z <- rpois(1000, 6); c(mean(z), var(z))
+```
+
 ```{r}
 ```
