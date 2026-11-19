@@ -132,5 +132,40 @@ plot(x, pexp(x, 1/3), type = "l", main = "CDF", ylab = "F(x)")
 par(op)
 ```
 
+---
+
+## 3.3 Expected Values, Variance and Standard Deviation
+
+`CLO2`
+
+**Business example.** Items per order: 1, 2, 3, 4 with probabilities 0.55, 0.30, 0.10, 0.05. The owner wants the average items per order and the variability, then the effect of a 5-dollar average price.
+
+**Core theory.**
+
+* **Expectation** is the probability-weighted average: the long-run mean.
+* **Variance** is the expected squared distance from the mean; SD is its square root (same units as $X$).
+* **Linearity:** $E[aX+b]=aE[X]+b$ and $\text{Var}(aX+b)=a^2\text{Var}(X)$. Adding a constant does not change spread.
+
+**Math.**
+
+$$E[X]=\sum_x x\,p(x), \qquad \text{Var}(X)=E[X^2]-(E[X])^2, \qquad \sigma=\sqrt{\text{Var}(X)}$$
+
+```{r}
+x <- 1:4
+p <- c(0.55, 0.30, 0.10, 0.05)
+
+EX   <- sum(x * p)                  # 1(.55)+2(.30)+3(.10)+4(.05) = 1.7
+EX2  <- sum(x^2 * p)
+VarX <- EX2 - EX^2
+c(E = EX, E_X2 = EX2, Var = VarX, SD = sqrt(VarX))
+
+# revenue per order = 5 * X
+c(E_revenue = 5 * EX, SD_revenue = 5 * sqrt(VarX))   # a=5 scales SD by 5
+
+# check by simulation
+set.seed(3); s <- sample(x, 1e5, TRUE, prob = p)
+c(sim_mean = mean(s), sim_var = var(s))
+```
+
 ```{r}
 ```
