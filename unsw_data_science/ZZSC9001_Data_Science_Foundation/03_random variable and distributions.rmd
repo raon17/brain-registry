@@ -224,5 +224,39 @@ c(mean = mean(daily$customers), var = var(daily$customers))   # var >> mean: sal
 set.seed(5); z <- rpois(1000, 6); c(mean(z), var(z))
 ```
 
+The daily counts have variance far above the mean because the underlying rate changes with ad spend, weather and weekends (a mixture of Poissons, called overdispersion). A single fixed-rate Poisson is valid only inside a stable window.
+
+---
+
+## 3.6 Uniform and Exponential Models
+
+`CLO2`
+
+**Business example.** (a) A supplier delivers at some unknown moment between 7:00 and 9:00 — every minute equally likely (Uniform). (b) The waiting time for the next customer or the time to serve a customer (Exponential).
+
+**Core theory.**
+
+* **Uniform($a,b$):** constant density on $[a,b]$.
+* **Exponential($\lambda$):** time between Poisson events. Mean $1/\lambda$. **Memoryless:** $P(T>s+t\mid T>s)=P(T>t)$. Having already waited 5 minutes does not change the remaining wait.
+
+**Math.**
+
+$$\text{Uniform: } f(x)=\frac{1}{b-a},\quad E=\frac{a+b}{2},\quad \text{Var}=\frac{(b-a)^2}{12}$$
+
+$$\text{Exponential: } F(t)=1-e^{-\lambda t},\quad E=\frac1\lambda,\quad \text{Var}=\frac1{\lambda^2}$$
+
+```{r}
+# Uniform delivery time, in minutes after 7:00: U(0, 120)
+punif(30, 0, 120)                          # delivered in first 30 minutes
+c(mean = 60, sd = 120 / sqrt(12))
+
+# Exponential service wait with mean 3 min
+rate <- 1/3
+1 - pexp(5, rate)                          # P(W > 5) = exp(-5/3)
+exp(-5/3)
+# memoryless: P(W > 8 | W > 5) equals P(W > 3)
+c((1 - pexp(8, rate)) / (1 - pexp(5, rate)), 1 - pexp(3, rate))
+```
+
 ```{r}
 ```
