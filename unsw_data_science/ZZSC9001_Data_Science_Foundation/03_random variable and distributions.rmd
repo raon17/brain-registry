@@ -87,9 +87,11 @@ $$\text{Discrete: }\sum_x p(x)=1 \qquad \text{Continuous: }\int_{-\infty}^{\inft
 
 ```{r}
 table(tx$qty)                       # discrete: countable values
+print("-------")
 round(prop.table(table(tx$qty)), 3) # empirical PMF
-
+print("-------")
 summary(tx$wait_min)                # continuous: any value in a range
+print("-------")
 op <- par(mfrow = c(1, 2))
 barplot(table(tx$qty), main = "Discrete: qty", col = "grey80")
 hist(tx$wait_min, breaks = 30, main = "Continuous: wait", xlab = "minutes", col = "grey80")
@@ -116,13 +118,19 @@ $$F(x)=\sum_{t\le x}p(t) \quad\text{or}\quad F(x)=\int_{-\infty}^{x}f(t)\,dt, \q
 
 ```{r}
 # Discrete: arrivals ~ Poisson(8) per hour
+cat("PMF: P(X = 8)\n")
 dpois(8, 8)                          # PMF: P(X = 8)
+cat("CDF: P(X <= 8)\n")
 ppois(8, 8)                          # CDF: P(X <= 8)
+cat("P(5 < X <= 10)\n")
 ppois(10, 8) - ppois(5, 8)           # P(5 < X <= 10)
 
 # Continuous: wait ~ Exponential(mean 3) => rate 1/3
+cat("P(W <= 2): ")
 pexp(2, rate = 1/3)                  # P(W <= 2) = 1 - exp(-2/3)
+cat("1 - exp(-2/3): ")
 1 - exp(-2/3)                        # same, by formula
+cat("95th percentile: ")
 qexp(0.95, rate = 1/3)               # 95th percentile
 
 x <- seq(0, 15, 0.05)
@@ -163,7 +171,8 @@ c(E = EX, E_X2 = EX2, Var = VarX, SD = sqrt(VarX))
 c(E_revenue = 5 * EX, SD_revenue = 5 * sqrt(VarX))   # a=5 scales SD by 5
 
 # check by simulation
-set.seed(3); s <- sample(x, 1e5, TRUE, prob = p)
+set.seed(3)
+s <- sample(x, 1e5, TRUE, prob = p)
 c(sim_mean = mean(s), sim_var = var(s))
 ```
 
@@ -256,6 +265,40 @@ rate <- 1/3
 exp(-5/3)
 # memoryless: P(W > 8 | W > 5) equals P(W > 3)
 c((1 - pexp(8, rate)) / (1 - pexp(5, rate)), 1 - pexp(3, rate))
+```
+
+---
+
+## 3.7 Normal Distributions and Standardisation
+
+`CLO2`
+
+**Business example.** Spend per day per customer is roughly Normal with mean 8 dollars and SD 2.5. What share of customers spends over 12? What spend marks the top 5%?
+
+**Core theory.**
+
+* **Normal($\mu,\sigma^2$):** symmetric bell curve fully set by mean and variance.
+* **Standardisation:** $Z=(X-\mu)/\sigma$ has mean 0, SD 1. It turns any normal question into a table or `pnorm` lookup.
+* **Empirical rule:** about 68%, 95%, 99.7% of values lie within 1, 2, 3 SD of the mean.
+* Sums and linear combinations of independent normals are normal.
+
+**Math.**
+
+$$f(x)=\frac{1}{\sigma\sqrt{2\pi}}e^{-\frac{(x-\mu)^2}{2\sigma^2}},\qquad Z=\frac{X-\mu}{\sigma}$$
+
+$$P(X>12)=P\!\left(Z>\frac{12-8}{2.5}\right)=P(Z>1.6)$$
+
+```{r}
+mu <- 8; sigma <- 2.5
+z <- (12 - mu) / sigma
+c(z = z, upper_tail = 1 - pnorm(z), direct = 1 - pnorm(12, mu, sigma))
+qnorm(0.95, mu, sigma)                          # top 5% threshold
+
+# empirical rule
+sapply(1:3, function(k) pnorm(k) - pnorm(-k))
+
+curve(dnorm(x, mu, sigma), 0, 16, ylab = "density", main = "Spend ~ N(8, 2.5^2)")
+abline(v = 12, col = "red")
 ```
 
 ```{r}
