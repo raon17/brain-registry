@@ -198,6 +198,8 @@ n <- 20; p <- 0.35
 dbinom(7, n, p)                              # P(X = 7)
 choose(20, 7) * p^7 * (1 - p)^13             # same, by formula
 1 - pbinom(9, n, p)                          # P(X >= 10)
+# OR lower.tail = FALSE
+# pbinom(9, n, p, lower.tail = FALSE)
 c(mean = n * p, var = n * p * (1 - p), sd = sqrt(n * p * (1 - p)))
 
 set.seed(4)
@@ -230,7 +232,9 @@ exp(-lambda)                               # same
 c(mean = mean(daily$customers), var = var(daily$customers))   # var >> mean: sales
                                                               # level varies by day
 # within a stable setting the match is tight
-set.seed(5); z <- rpois(1000, 6); c(mean(z), var(z))
+set.seed(5); 
+z <- rpois(1000, 6); 
+c(mean(z), var(z))
 ```
 
 The daily counts have variance far above the mean because the underlying rate changes with ad spend, weather and weekends (a mixture of Poissons, called overdispersion). A single fixed-rate Poisson is valid only inside a stable window.
@@ -293,12 +297,80 @@ mu <- 8; sigma <- 2.5
 z <- (12 - mu) / sigma
 c(z = z, upper_tail = 1 - pnorm(z), direct = 1 - pnorm(12, mu, sigma))
 qnorm(0.95, mu, sigma)                          # top 5% threshold
-
+print("-------")
 # empirical rule
 sapply(1:3, function(k) pnorm(k) - pnorm(-k))
-
+print("-------")
 curve(dnorm(x, mu, sigma), 0, 16, ylab = "density", main = "Spend ~ N(8, 2.5^2)")
 abline(v = 12, col = "red")
+```
+
+---
+
+## 3.8 Joint Distributions, Covariance and Correlation
+
+`CLO2`
+
+**Business example.** Does higher ad spend move together with sales? Does the answer change how the owner budgets?
+
+**Core theory.**
+
+* A **joint distribution** describes two variables together; independence means it factorises into the marginals.
+* **Covariance** measures joint linear movement but depends on units. **Correlation** rescales to $[-1,1]$.
+* Variance of a sum includes the covariance term. Independent variables have zero covariance (the converse is false for non-linear dependence).
+
+**Math.**
+
+$$\text{Cov}(X,Y)=E[XY]-E[X]E[Y],\qquad \rho=\frac{\text{Cov}(X,Y)}{\sigma_X\sigma_Y}$$
+
+$$\text{Var}(X+Y)=\text{Var}(X)+\text{Var}(Y)+2\,\text{Cov}(X,Y)$$
+
+```{r}
+X <- daily$ad_spend; Y <- daily$sales
+cov_manual <- mean(X * Y) - mean(X) * mean(Y)      # population form
+c(cov_manual = cov_manual, cov_sample = cov(X, Y)) # sample uses n-1
+c(cor_manual = cov(X, Y) / (sd(X) * sd(Y)), cor_R = cor(X, Y))
+
+# variance of a sum
+c(var_sum = var(X + Y),
+  by_formula = var(X) + var(Y) + 2 * cov(X, Y))
+plot(X, Y, xlab = "Ad spend", ylab = "Sales", pch = 19, col = rgb(0, 0, 0, .4))
+abline(lm(Y ~ X), col = "red", lwd = 2)
+```
+
+---
+
+## 3.9 Sampling Distributions and the Law of Large Numbers
+
+`CLO2, CLO4`
+
+**Business example.** The owner surveys 30 transactions to estimate average spend. A different 30 would give a different average. How much does the average vary from sample to sample?
+
+**Core theory.**
+
+* A **statistic** (like $\bar X$) is itself a random variable. Its distribution over repeated samples is the **sampling distribution**.
+* $E[\bar X]=\mu$ (unbiased), $\text{SD}(\bar X)=\sigma/\sqrt n$, called the **standard error**.
+* **Law of Large Numbers:** $\bar X_n\to\mu$ as $n\to\infty$.
+* Quadrupling the sample size halves the standard error.
+
+**Math.**
+
+$$E[\bar X]=\mu,\qquad \text{SE}(\bar X)=\frac{\sigma}{\sqrt n}$$
+
+```{r}
+mu <- mean(tx$spend); sigma <- sqrt(mean((tx$spend - mu)^2))   # treat 800 tx as population
+set.seed(9)
+means30 <- replicate(5000, mean(sample(tx$spend, 30)))
+c(pop_mean = mu, mean_of_means = mean(means30))
+c(theory_SE = sigma / sqrt(30), simulated_SE = sd(means30))
+
+# LLN: running mean
+rm <- cumsum(tx$spend) / seq_along(tx$spend)
+plot(rm, type = "l", xlab = "number of transactions", ylab = "running mean spend")
+abline(h = mu, col = "red")
+```
+
+```{r}
 ```
 
 ```{r}
