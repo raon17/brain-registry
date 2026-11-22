@@ -367,14 +367,11 @@ p       <- c(Low = 0.3, Medium = 0.5, High = 0.2)
 payoff <- outer(actions, demand, function(a, d) 4 * pmin(a, d) - 1.5 * a)
 dimnames(payoff) <- list(paste0("bake", actions), names(demand))
 payoff
-
 ev <- payoff %*% p                        # expected payoff per action
+print("-------------------------")
 ev
+print("-------------------------")
 best_now     <- max(ev)
 perfect_info <- sum(apply(payoff, 2, max) * p)
-c(best_action = actions[which.max(ev)], EV = best_now,
-  EV_perfect_info = perfect_info, EVPI = perfect_info - best_now)
-```
-
-```{r}
+c(best_action = actions[which.max(ev)], EV = best_now, EV_perfect_info = perfect_info, EVPI = perfect_info - best_now)
 ```
