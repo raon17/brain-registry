@@ -1,0 +1,246 @@
+```{r}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 6.5, fig.height = 4, comment = "#>")
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+set.seed(2026)
+
+# ---- daily operations table ----
+n_days <- 180
+daily <- data.frame(date = seq(as.Date("2026-01-01"), by = "day", length.out = n_days))
+daily$wday    <- factor(format(daily$date, "%a"),
+                        levels = c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))
+daily$weekend <- as.integer(daily$wday %in% c("Sat", "Sun"))
+daily$temp    <- round(26 - 8 * (1:n_days) / n_days + rnorm(n_days, 0, 2), 1)
+daily$promo   <- rbinom(n_days, 1, 0.4)
+daily$ad_spend <- round(runif(n_days, 50, 300))
+# true mechanism: sales = 900 + 2*ad + 150*promo + 180*weekend + 12*temp + noise
+daily$sales     <- round(900 + 2 * daily$ad_spend + 150 * daily$promo +
+                         180 * daily$weekend + 12 * daily$temp + rnorm(n_days, 0, 120))
+daily$customers <- rpois(n_days, daily$sales / 8.5)
+
+# ---- transaction table ----
+menu <- data.frame(drink = c("Latte", "Flat White", "Cappuccino", "Cold Brew", "Tea"),
+                   price = c(5.5, 5.0, 5.0, 6.0, 4.0))
+n_tx <- 800
+tx <- data.frame(id = 1:n_tx,
+                 date = sample(daily$date, n_tx, replace = TRUE),
+                 hour = sample(7:16, n_tx, replace = TRUE,
+                               prob = c(.18, .16, .12, .08, .08, .12, .10, .07, .05, .04)))
+tx$drink    <- sample(menu$drink, n_tx, replace = TRUE, prob = c(.30, .30, .15, .15, .10))
+tx$loyalty  <- rbinom(n_tx, 1, 0.35)
+tx$qty      <- 1 + rpois(n_tx, 0.2 + 0.5 * tx$loyalty)   # loyal customers buy more
+tx$price    <- menu$price[match(tx$drink, menu$drink)]
+tx$spend    <- tx$price * tx$qty
+tx$wait_min <- round(rexp(n_tx, rate = 1/3), 2)
+
+head(daily)
+head(tx)
+```
+
+# Chapter 4 — Statistical Inference and Hypothesis Testing
+
+**CLO2, CLO3, CLO4** · 10 topics · Case study: evaluating a new coffee shop promotion
+
+---
+
+## 4.1 Populations, Samples, Parameters and Statistics
+
+`CLO3`
+
+**Business example.** The owner cares about **all** future customers' average spend (population), but only observes a few weeks of transactions (sample).
+
+**Core theory.**
+
+| Population | Sample |
+|---|---|
+| Parameter (fixed, unknown): $\mu,\ \sigma,\ p$ | Statistic (random, computed): $\bar x,\ s,\ \hat p$ |
+
+Inference uses statistics to learn about parameters and quantifies the uncertainty. The 800 transactions are treated as the population here so the parameter is known and estimates can be checked.
+
+**Math.**
+
+$$\mu=\frac1N\sum_{i=1}^N x_i,\quad \bar x=\frac1n\sum_{i=1}^n x_i,\quad p=\frac{\#\text{members}}{N},\quad \hat p=\frac{\#\text{members in sample}}{n}$$
+
+```{r}
+mu_pop <- mean(tx$spend); 
+p_pop <- mean(tx$loyalty)    # parameters
+set.seed(45)
+smp <- tx[sample(nrow(tx), 50), ]                      # sample of n = 50
+c(mu = mu_pop, xbar = mean(smp$spend))
+c(p = p_pop,   phat = mean(smp$loyalty))
+```
+
+---
+
+## 4.2 Sampling Methods, Selection Bias and Representativeness
+
+`CLO3`
+
+**Business example.** The owner asks only people who scan the loyalty app for a 5-question survey. Members spend more, so the survey overstates average spend for all customers.
+
+**Core theory.**
+
+* **Simple random sample (SRS):** every unit has equal chance of selection. Others: stratified, cluster, systematic.
+* **Selection bias:** the selection process is related to the outcome. A large biased sample is still biased; a larger $n$ shrinks random error, not bias.
+* **Representativeness** is about how the sample was drawn, not how big it is.
+
+**Math.**
+
+$$\text{Bias}(\hat\theta)=E[\hat\theta]-\theta$$
+
+```{r}
+set.seed(42)
+srs    <- sample(tx$spend, 100)                          # random sample
+biased <- sample(tx$spend[tx$loyalty == 1], 100)         # members only
+c(truth = mean(tx$spend), SRS = mean(srs), members_only = mean(biased))
+
+# bias does not shrink with n
+sapply(c(50, 100, 250), function(n) c(n = n, biased_mean = mean(sample(tx$spend[tx$loyalty == 1], n))))
+```
+
+---
+
+## 4.3 Point Estimation, Bias and Standard Errors
+
+`CLO3`
+
+**Business example.** Which formula for the variance of spend should the analyst use: divide by $n$ or by $n-1$?
+
+**Core theory.**
+
+* A **point estimator** gives one number for a parameter. Desirable properties: unbiased, low variance, consistent.
+* $\bar X$ is unbiased for $\mu$. The sample variance with $n-1$ is unbiased for $\sigma^2$; dividing by $n$ underestimates it.
+* The **standard error** is the SD of an estimator; it is estimated by plugging in $s$.
+
+**Math.**
+
+$$s^2=\frac{1}{n-1}\sum(x_i-\bar x)^2,\qquad \widehat{\text{SE}}(\bar x)=\frac{s}{\sqrt n},\qquad \widehat{\text{SE}}(\hat p)=\sqrt{\frac{\hat p(1-\hat p)}{n}}$$
+
+```{r}
+set.seed(43)
+sigma2 <- 4                                         # true variance
+est <- replicate(20000, {
+  x <- rnorm(10, 0, sqrt(sigma2))
+  c(n_div = sum((x - mean(x))^2) / 10, n1_div = sum((x - mean(x))^2) / 9)
+})
+rowMeans(est)                                        # n-1 version averages to 4; n version to 3.6
+
+x <- smp$spend
+c(mean = mean(x), se = sd(x) / sqrt(length(x)))
+```
+
+The dividing-by-$n$ estimator is biased low by the factor $(n-1)/n = 0.9$.
+
+---
+
+## 4.4 Confidence Intervals and Their Interpretation
+
+`CLO3`
+
+**Business example.** "Average spend is between two stated dollar values" is more useful to the owner than a single estimate, because it shows how precise the estimate is.
+
+**Core theory.**
+
+* A **95% confidence interval** is built by a procedure that captures the true parameter in 95% of repeated samples. For one computed interval, the parameter is either in it or not.
+* Wrong reading: "there is a 95% probability the true mean lies in this interval."
+* Wider with: higher confidence, larger SD. Narrower with larger $n$.
+* For a mean with unknown $\sigma$ use the $t$ distribution with $n-1$ degrees of freedom.
+
+**Math.**
+
+$$\bar x\pm t_{\alpha/2,\,n-1}\frac{s}{\sqrt n}, \qquad \hat p\pm z_{\alpha/2}\sqrt{\frac{\hat p(1-\hat p)}{n}}$$
+
+```{r}
+x <- smp$spend; 
+n <- length(x)
+tcrit <- qt(0.975, df = n - 1)
+ci <- mean(x) + c(-1, 1) * tcrit * sd(x) / sqrt(n)
+ci
+print("--------------------")
+t.test(x)$conf.int                                   # same
+
+# coverage simulation: does the procedure capture mu 95% of the time?
+set.seed(44)
+cover <- replicate(5000, {
+  s <- sample(tx$spend, 50)
+  ci <- mean(s) + c(-1, 1) * qt(.975, 49) * sd(s) / sqrt(50)
+  ci[1] <= mean(tx$spend) && mean(tx$spend) <= ci[2]
+})
+cat("Coverage probability:", mean(cover))
+```
+
+---
+
+## 4.5 Null and Alternative Hypotheses
+
+`CLO3`
+
+**Business example.** The promotion costs money. The owner will only keep it if sales rise. That wording fixes the hypotheses.
+
+**Core theory.**
+
+* **$H_0$ (null):** the default, no effect or no difference. **$H_1$ (alternative):** the claim to be supported.
+* Tests are one-sided (">" or "<") or two-sided ("≠"). Choose before seeing data.
+* The conclusion is "reject $H_0$" or "fail to reject $H_0$". Never "prove $H_0$".
+* Set the significance level $\alpha$ (commonly 0.05) in advance.
+
+**Math.**
+
+$$H_0:\ \mu_{\text{promo}}-\mu_{\text{no promo}}=0\qquad H_1:\ \mu_{\text{promo}}-\mu_{\text{no promo}}>0$$
+
+```{r}
+hyp <- data.frame(
+  question  = c("Promo raises mean daily sales", "Avg spend differs from $7", "Members are 35% of customers"),
+  H0        = c("mu_promo = mu_none", "mu = 7", "p = 0.35"),
+  H1        = c("mu_promo > mu_none", "mu != 7", "p != 0.35"),
+  test      = c("two-sample t (one-sided)", "one-sample t", "proportion z / chi-sq"))
+hyp
+
+# the observed evidence for the first hypothesis
+obs_diff <- mean(daily$sales[daily$promo == 1]) - mean(daily$sales[daily$promo == 0])
+obs_diff
+```
+
+---
+
+## 4.6 Test Statistics, Null Distributions and p-Values
+
+`CLO3`
+
+**Business example.** Is the observed sales gap on promo days bigger than random day-to-day noise would produce?
+
+**Core theory.**
+
+* A **test statistic** standardises the evidence: the estimate minus the null value, divided by its standard error.
+* The **null distribution** is its distribution if $H_0$ were true.
+* The **p-value** is $P(\text{result at least this extreme}\mid H_0)$. It is not the probability $H_0$ is true.
+* Reject $H_0$ if p-value $<\alpha$.
+
+**Math.** Welch two-sample statistic:
+
+$$t=\frac{\bar x_1-\bar x_0}{\sqrt{\dfrac{s_1^2}{n_1}+\dfrac{s_0^2}{n_0}}}$$
+
+```{r}
+g1 <- daily$sales[daily$promo == 1]; g0 <- daily$sales[daily$promo == 0]
+se <- sqrt(var(g1)/length(g1) + var(g0)/length(g0))
+t_stat <- (mean(g1) - mean(g0)) / se
+df <- se^4 / ((var(g1)/length(g1))^2/(length(g1)-1) + (var(g0)/length(g0))^2/(length(g0)-1))
+c(t = t_stat, df = df, p_one_sided = 1 - pt(t_stat, df))
+t.test(g1, g0, alternative = "greater")$p.value      # same
+
+# simulation-based null distribution: shuffle promo labels
+set.seed(46)
+perm <- replicate(5000, { s <- sample(daily$promo)
+                          mean(daily$sales[s == 1]) - mean(daily$sales[s == 0]) })
+obs <- mean(g1) - mean(g0)
+(sum(perm >= obs) + 1) / (length(perm) + 1)          # permutation p-value (never exactly 0)
+hist(perm, breaks = 40, col = "grey85", main = "Null distribution of the difference")
+abline(v = obs, col = "red", lwd = 2)
+```
+
+```{r}
+```
