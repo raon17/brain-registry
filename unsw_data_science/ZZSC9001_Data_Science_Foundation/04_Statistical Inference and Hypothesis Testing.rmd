@@ -305,15 +305,41 @@ t.test(after - before)$statistic                     # identical statistic
 $$z=\frac{\hat p_1-\hat p_2}{\sqrt{\hat p(1-\hat p)\left(\frac1{n_1}+\frac1{n_2}\right)}},\qquad \chi^2=\sum\frac{(O-E)^2}{E}$$
 
 ```{r}
-prop.test(c(260, 220), c(1000, 1000))                # two proportions
+```
 
-conv <- matrix(c(260, 740, 220, 780), 2, byrow = TRUE,
-               dimnames = list(c("Exposed", "Control"), c("Bought", "No")))
-chisq.test(conv, correct = FALSE)$statistic          # equals z^2 from the proportion test
+---
 
-# association: drink vs loyalty
-tab <- table(tx$drink, tx$loyalty)
-ct <- chisq.test(tab)
-ct$expected                                          # E under independence
-ct
+## 4.9 Type I Errors, Type II Errors, Power and Sample Size
+
+`CLO3, CLO4`
+
+**Business example.** How many days must the owner run the promotion to reliably detect a true 150-dollar effect when daily sales have SD about 230?
+
+**Core theory.**
+
+| | $H_0$ true | $H_0$ false |
+|---|---|---|
+| Reject $H_0$ | **Type I error** (prob. $\alpha$) | correct (**power** $=1-\beta$) |
+| Do not reject | correct | **Type II error** (prob. $\beta$) |
+
+Power rises with: larger effect, larger $n$, smaller SD, larger $\alpha$. Sample size planning fixes $\alpha$, desired power (often 80%) and an effect worth detecting, then solves for $n$.
+
+**Math.** Approximate sample size per group for a two-sided test:
+
+$$n\approx\frac{2\sigma^2\,(z_{1-\alpha/2}+z_{1-\beta})^2}{\delta^2}$$
+
+```{r}
+power.t.test(delta = 150, sd = 230, sig.level = 0.05, power = 0.80)
+
+# by formula
+2 * 230^2 * (qnorm(.975) + qnorm(.80))^2 / 150^2
+
+# simulate both error types
+set.seed(49)
+p_null <- replicate(4000, t.test(rnorm(40, 0, 230), rnorm(40, 0, 230))$p.value)
+p_alt  <- replicate(4000, t.test(rnorm(40, 150, 230), rnorm(40, 0, 230))$p.value)
+c(type_I_rate = mean(p_null < .05), power_n40 = mean(p_alt < .05))
+```
+
+```{r}
 ```
