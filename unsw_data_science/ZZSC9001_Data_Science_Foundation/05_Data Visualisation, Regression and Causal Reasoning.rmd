@@ -1,0 +1,139 @@
+```{r}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 6.5, fig.height = 4, comment = "#>")
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+set.seed(2026)
+
+# ---- daily operations table ----
+n_days <- 180
+daily <- data.frame(date = seq(as.Date("2026-01-01"), by = "day", length.out = n_days))
+daily$wday    <- factor(format(daily$date, "%a"),
+                        levels = c("Mon","Tue","Wed","Thu","Fri","Sat","Sun"))
+daily$weekend <- as.integer(daily$wday %in% c("Sat", "Sun"))
+daily$temp    <- round(26 - 8 * (1:n_days) / n_days + rnorm(n_days, 0, 2), 1)
+daily$promo   <- rbinom(n_days, 1, 0.4)
+daily$ad_spend <- round(runif(n_days, 50, 300))
+# true mechanism: sales = 900 + 2*ad + 150*promo + 180*weekend + 12*temp + noise
+daily$sales     <- round(900 + 2 * daily$ad_spend + 150 * daily$promo +
+                         180 * daily$weekend + 12 * daily$temp + rnorm(n_days, 0, 120))
+daily$customers <- rpois(n_days, daily$sales / 8.5)
+
+# ---- transaction table ----
+menu <- data.frame(drink = c("Latte", "Flat White", "Cappuccino", "Cold Brew", "Tea"),
+                   price = c(5.5, 5.0, 5.0, 6.0, 4.0))
+n_tx <- 800
+tx <- data.frame(id = 1:n_tx,
+                 date = sample(daily$date, n_tx, replace = TRUE),
+                 hour = sample(7:16, n_tx, replace = TRUE,
+                               prob = c(.18, .16, .12, .08, .08, .12, .10, .07, .05, .04)))
+tx$drink    <- sample(menu$drink, n_tx, replace = TRUE, prob = c(.30, .30, .15, .15, .10))
+tx$loyalty  <- rbinom(n_tx, 1, 0.35)
+tx$qty      <- 1 + rpois(n_tx, 0.2 + 0.5 * tx$loyalty)   # loyal customers buy more
+tx$price    <- menu$price[match(tx$drink, menu$drink)]
+tx$spend    <- tx$price * tx$qty
+tx$wait_min <- round(rexp(n_tx, rate = 1/3), 2)
+
+head(daily)
+head(tx)
+```
+
+# Chapter 5 — Data Visualisation, Regression and Causal Reasoning
+
+## 5.1 Data Collection, Variable Types and Measurement Quality
+
+`CLO5`
+
+**Business example.** Before modelling sales, the analyst classifies every column. Treating `weekend` (0/1) as a continuous number or `wday` as free text gives wrong plots and wrong models.
+
+**Core theory.**
+
+| Type | Scale | Example | Valid summaries |
+|---|---|---|---|
+| Categorical, nominal | labels | drink | counts, mode |
+| Categorical, ordinal | ordered labels | satisfaction 1–5 | median, counts |
+| Numeric, discrete | counts | customers | mean, SD |
+| Numeric, continuous | measured | temp, sales | mean, SD, quantiles |
+
+Measurement quality: **validity** (does it measure the right thing?), **reliability** (repeatable?), **accuracy**, **completeness**. Collection design matters: **observational** (recorded as it happens) versus **experimental** (the analyst assigns treatments).
+
+**Math.** None.
+
+```{r}
+str(daily)
+print
+sapply(daily, class)
+
+satisfaction <- factor(c("poor", "good", "ok", "good"), levels = c("poor", "ok", "good"), ordered = TRUE)   # ordinal
+satisfaction; satisfaction < "good"
+colSums(is.na(daily))                                # completeness
+```
+
+---
+
+## 5.2 Visualising Distributions, Groups and Time Trends
+
+`CLO5`
+
+**Business example.** Three questions, three plot types: How are daily sales distributed? Do promo days look different? Is there a trend or weekly pattern?
+
+**Core theory.**
+
+| Question | Plot |
+|---|---|
+| One numeric variable | histogram, density, boxplot |
+| Numeric across groups | side-by-side boxplot, violin |
+| Time | line plot |
+| Two numeric | scatterplot (5.3) |
+| Category counts | bar chart |
+
+Good charts: labelled axes with units, a zero baseline for bars, no dual-axis tricks, one message per chart.
+
+**Math.** Histogram density estimate with bin width $h$:
+
+$$\hat f(x)=\frac{\#\{x_i\in\text{bin}\}}{n\,h}$$
+
+```{r}
+ggplot(daily, aes(sales)) + geom_histogram(bins = 25, fill = "grey70", colour = "white") +
+  labs(title = "Distribution of daily sales", x = "Sales ($)", y = "Days")
+
+ggplot(daily, aes(factor(promo, labels = c("No promo", "Promo")), sales)) +
+  geom_boxplot(fill = "grey90") + labs(x = NULL, y = "Sales ($)", title = "Sales by promotion")
+
+ggplot(daily, aes(date, sales)) + geom_line(colour = "grey40") +
+  geom_smooth(se = FALSE, method = "loess", formula = y ~ x) +
+  labs(title = "Daily sales over time", x = NULL, y = "Sales ($)")
+```
+
+---
+
+## 5.3 Scatterplots, Correlation and Misleading Relationships
+
+`CLO5`
+
+**Business example.** Ad spend and sales are plotted together. A strong correlation tempts the claim "ads cause sales", but correlation alone cannot support that. It can also hide curves, clusters and outliers.
+
+**Core theory.**
+
+* **Pearson correlation** measures *linear* association only, $-1\le r\le1$.
+* Same $r$ can come from very different shapes (Anscombe's quartet). **Always plot.**
+* Correlation is not causation: a third variable, reverse direction or coincidence can create it (5.8).
+
+**Math.**
+
+$$r=\frac{\sum(x_i-\bar x)(y_i-\bar y)}{\sqrt{\sum(x_i-\bar x)^2\sum(y_i-\bar y)^2}}$$
+
+```{r}
+cor(daily$ad_spend, daily$sales)
+
+# Anscombe's quartet is built into R
+sapply(1:4, function(i) cor(anscombe[[paste0("x", i)]], anscombe[[paste0("y", i)]]))
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))
+for (i in 1:4) plot(anscombe[[paste0("x", i)]], anscombe[[paste0("y", i)]],
+                    pch = 19, xlab = paste0("x", i), ylab = paste0("y", i),
+                    main = paste("Dataset", i), xlim = c(3, 20), ylim = c(3, 13))
+par(op)
+```
