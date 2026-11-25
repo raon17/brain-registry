@@ -137,3 +137,32 @@ for (i in 1:4) plot(anscombe[[paste0("x", i)]], anscombe[[paste0("y", i)]],
                     main = paste("Dataset", i), xlim = c(3, 20), ylim = c(3, 13))
 par(op)
 ```
+
+All four datasets have correlation $\approx0.816$ but only the first is a clean linear relationship.
+
+---
+
+## 5.4 Simple Linear Regression and Least Squares
+
+`CLO5`
+
+**Business example.** How many extra dollars of sales come with each extra dollar of ad spend?
+
+**Core theory.** Model one outcome $y$ by one predictor $x$ with a straight line plus noise. **Least squares** chooses the intercept $b_0$ and slope $b_1$ that minimise the sum of squared residuals $\sum(y_i-\hat y_i)^2$. The line always passes through $(\bar x,\bar y)$.
+
+**Math.**
+
+$$y_i=\beta_0+\beta_1x_i+\varepsilon_i,\qquad b_1=\frac{S_{xy}}{S_{xx}}=\frac{\sum(x_i-\bar x)(y_i-\bar y)}{\sum(x_i-\bar x)^2},\qquad b_0=\bar y-b_1\bar x$$
+
+```{r}
+x <- daily$ad_spend; y <- daily$sales
+b1 <- sum((x - mean(x)) * (y - mean(y))) / sum((x - mean(x))^2)
+b0 <- mean(y) - b1 * mean(x)
+c(b0 = b0, b1 = b1)
+
+fit1 <- lm(sales ~ ad_spend, data = daily)
+coef(fit1)                                         # identical
+
+plot(x, y, pch = 19, col = rgb(0, 0, 0, .4), xlab = "Ad spend ($)", ylab = "Sales ($)")
+abline(fit1, col = "red", lwd = 2)
+```
