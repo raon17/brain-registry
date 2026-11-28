@@ -166,3 +166,28 @@ coef(fit1)                                         # identical
 plot(x, y, pch = 19, col = rgb(0, 0, 0, .4), xlab = "Ad spend ($)", ylab = "Sales ($)")
 abline(fit1, col = "red", lwd = 2)
 ```
+
+The estimated slope is close to the true value of 2 (the gap is sampling noise), because ad spend in this simulation is generated independently of the other drivers. Real data are rarely this tidy (5.8).
+
+---
+
+## 5.5 Multiple Regression and Adjusted Associations
+
+`CLO5`
+
+**Business example.** Sales depend on ad spend, promotion, weekend and temperature together. The owner wants the ad effect **holding the others fixed**.
+
+**Core theory.** Multiple regression estimates each coefficient as the association between that predictor and the outcome **with the other predictors held constant**. This is an *adjusted* association. Omitted variables correlated with a predictor bias its coefficient. Categorical predictors enter as dummy (0/1) variables.
+
+**Math.** Matrix form, with design matrix $X$ (a column of ones plus predictors):
+
+$$\mathbf y=X\boldsymbol\beta+\boldsymbol\varepsilon,\qquad \hat{\boldsymbol\beta}=(X^\top X)^{-1}X^\top\mathbf y$$
+
+```{r}
+fit <- lm(sales ~ ad_spend + promo + weekend + temp, data = daily)
+coef(fit)                                          # true: 900, 2, 150, 180, 12
+
+X <- model.matrix(fit)                             # design matrix
+beta <- solve(t(X) %*% X) %*% t(X) %*% daily$sales # (X'X)^-1 X'y
+round(drop(beta), 3)                               # identical to coef(fit)
+```
